@@ -1,5 +1,10 @@
 import { fal } from "@fal-ai/client";
 
+// Ensure fal.ai credentials are set from env
+if (process.env.FAL_KEY) {
+  fal.config({ credentials: process.env.FAL_KEY });
+}
+
 export interface GenerationRequest {
   prompt: string;
   negativePrompt?: string;

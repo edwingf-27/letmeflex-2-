@@ -63,7 +63,7 @@ export default function CreditsPage() {
       const res = await fetch("/api/credits/purchase", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ packId }),
+        body: JSON.stringify({ type: "credit_pack", packId }),
       });
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
@@ -85,7 +85,7 @@ export default function CreditsPage() {
       const res = await fetch("/api/credits/purchase", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planKey }),
+        body: JSON.stringify({ type: "subscription", planKey }),
       });
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));

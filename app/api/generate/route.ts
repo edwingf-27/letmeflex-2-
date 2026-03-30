@@ -152,7 +152,7 @@ export async function POST(req: Request) {
         creditsRemaining: newCredits,
       });
     } catch (genError: any) {
-      console.error("[GENERATION_ERROR]", genError?.message);
+      console.error("[GENERATION_ERROR]", genError?.message, genError?.body || genError?.status || "", JSON.stringify(genError).substring(0, 500));
 
       // Refund credits
       await db.from("User").update({ credits: user.credits }).eq("id", user.id);
