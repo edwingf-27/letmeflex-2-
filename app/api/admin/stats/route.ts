@@ -126,16 +126,52 @@ export async function GET() {
       .map(([date, count]) => ({ date, count }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
+    // Revenue today and this month
+    const todayRevenue = (thirtyDayOrders.data || [])
+      .filter((o: any) => o.createdAt >= todayStart.toISOString())
+      .reduce((sum: number, o: any) => sum + (o.amount || 0), 0) / 100;
+
+    const monthRevenue = (thirtyDayOrders.data || [])
+      .filter((o: any) => o.createdAt >= monthStart.toISOString())
+      .reduce((sum: number, o: any) => sum + (o.amount || 0), 0) / 100;
+
+    // User growth (% change vs previous week)
+    const prevWeekStart = new Date(weekStart);
+    prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+    const thisWeekSignups = (thirtyDayUsers.data || [])
+      .filter((u: any) => u.createdAt >= weekStart.toISOString()).length;
+    const prevWeekSignups = (thirtyDayUsers.data || [])
+      .filter((u: any) => u.createdAt >= prevWeekStart.toISOString() && u.createdAt < weekStart.toISOString()).length;
+    const userGrowth = prevWeekSignups > 0 ? ((thisWeekSignups - prevWeekSignups) / prevWeekSignups) * 100 : thisWeekSignups > 0 ? 100 : 0;
+
+    // Subscriptions with defaults for all plans
+    const subscriptions = {
+      FREE: 0,
+      STARTER: subscriptionsByPlan["STARTER"] || 0,
+      PRO: subscriptionsByPlan["PRO"] || 0,
+      UNLIMITED: subscriptionsByPlan["UNLIMITED"] || 0,
+    };
+
+    // Normalize dailyRevenue to use "amount" key
+    const dailyRevenueNormalized = dailyRevenue.map((d) => ({
+      date: d.date,
+      amount: d.total,
+    }));
+
     return NextResponse.json({
       totalUsers,
+      userGrowth,
       totalGenerations,
-      todayGenerations,
-      weekGenerations,
+      generationsToday: todayGenerations,
+      generationsWeek: weekGenerations,
       totalRevenue,
       mrr,
+      revenueToday: todayRevenue,
+      revenueMonth: monthRevenue,
+      subscriptions,
       activeSubscriptions: subscriptionsByPlan,
       dailyGenerations,
-      dailyRevenue,
+      dailyRevenue: dailyRevenueNormalized,
       dailySignups,
     });
   } catch (error) {

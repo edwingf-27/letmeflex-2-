@@ -11,11 +11,11 @@ export async function GET(req: Request) {
     }
 
     const { searchParams } = new URL(req.url);
-    const search = searchParams.get("search") || "";
+    const search = searchParams.get("search") || searchParams.get("q") || "";
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = Math.min(
       100,
-      Math.max(1, parseInt(searchParams.get("limit") || "20", 10))
+      Math.max(1, parseInt(searchParams.get("limit") || searchParams.get("pageSize") || "20", 10))
     );
     const skip = (page - 1) * limit;
 
@@ -69,6 +69,9 @@ export async function GET(req: Request) {
         ...u,
         generationCount: generationCounts[u.id] || 0,
       })),
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
       pagination: {
         page,
         limit,
@@ -100,7 +103,16 @@ export async function PATCH(req: Request) {
     }
 
     const body = await req.json();
-    const parsed = updateUserSchema.safeParse(body);
+
+    // Normalize: frontend may send { userId, action, plan } or { userId, credits, plan }
+    const normalized = {
+      userId: body.userId,
+      credits: body.credits,
+      plan: body.plan,
+      role: body.role,
+    };
+
+    const parsed = updateUserSchema.safeParse(normalized);
 
     if (!parsed.success) {
       return NextResponse.json(
