@@ -59,17 +59,20 @@ function LoginForm() {
         email,
         password,
         redirect: false,
+        callbackUrl,
       });
 
       if (res?.error) {
         setGeneralError("Invalid email or password.");
+        setLoading(false);
+      } else if (res?.url) {
+        // Use window.location for a full page navigation so cookies are applied
+        window.location.href = res.url;
       } else {
-        router.push(callbackUrl);
-        router.refresh();
+        window.location.href = callbackUrl;
       }
     } catch {
       setGeneralError("Something went wrong. Please try again.");
-    } finally {
       setLoading(false);
     }
   }
