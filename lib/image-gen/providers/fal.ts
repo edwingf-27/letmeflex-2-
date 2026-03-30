@@ -36,8 +36,10 @@ export async function generateWithFal(
     },
   }) as any;
 
+  // fal.subscribe wraps response in result.data
+  const data = result.data || result;
   return {
-    imageUrl: result.images?.[0]?.url || result.output?.url || "",
+    imageUrl: data.images?.[0]?.url || data.output?.url || result.images?.[0]?.url || "",
     modelUsed: modelId,
     provider: "fal",
     durationMs: Date.now() - start,
@@ -57,8 +59,9 @@ export async function faceSwapWithFal(
     },
   }) as any;
 
+  const data = result.data || result;
   return {
-    imageUrl: result.image?.url || result.output?.url || "",
+    imageUrl: data.image?.url || data.images?.[0]?.url || data.output?.url || "",
     modelUsed: "fal-ai/face-swap",
     provider: "fal",
     durationMs: Date.now() - start,
