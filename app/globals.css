@@ -1,0 +1,84 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Montserrat:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,700;1,700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-bg: #0C0C0E;
+  --color-surface: #141416;
+  --color-surface-2: #1C1C1F;
+  --color-border: #2A2A2E;
+  --color-gold: #F9CA1F;
+  --color-gold-glow: rgba(249,202,31,0.18);
+  --color-gold-dark: #C9A212;
+  --color-text: #FFFFFF;
+  --color-text-muted: #8A8A95;
+  --color-text-subtle: #4A4A55;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: 'Montserrat', sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::selection {
+  background: rgba(249, 202, 31, 0.3);
+  color: #fff;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-subtle);
+}
+
+@layer utilities {
+  .gold-gradient-text {
+    background: linear-gradient(135deg, #F9CA1F, #FFE066, #F9CA1F);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .gold-gradient-line {
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #F9CA1F, transparent);
+  }
+
+  .glass-card {
+    background: rgba(20, 20, 22, 0.8);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--color-border);
+  }
+
+  .animate-in {
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+}
