@@ -193,8 +193,18 @@ function LoginForm() {
             </button>
           </form>
 
+          {/* Forgot Password */}
+          <p className="mt-4 text-center text-sm">
+            <Link
+              href="/reset-password"
+              className="text-zinc-500 hover:text-[#F9CA1F] transition-colors"
+            >
+              Forgot your password?
+            </Link>
+          </p>
+
           {/* Footer */}
-          <p className="mt-6 text-center text-sm text-zinc-500">
+          <p className="mt-3 text-center text-sm text-zinc-500">
             Don&apos;t have an account?{" "}
             <Link
               href="/register"

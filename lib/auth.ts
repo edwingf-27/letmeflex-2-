@@ -22,23 +22,48 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        if (!credentials?.email || !credentials?.password) {
+          console.log("[AUTH] Missing email or password");
+          return null;
+        }
 
-        const { data: user } = await db
+        const { data: user, error } = await db
           .from("User")
           .select("id, email, name, image, passwordHash")
           .eq("email", credentials.email as string)
           .single();
 
-        if (!user || !user.passwordHash) return null;
+        if (error) {
+          console.error("[AUTH] DB query error:", error.message);
+          return null;
+        }
 
-        const isValid = await bcrypt.compare(
-          credentials.password as string,
-          user.passwordHash
-        );
+        if (!user) {
+          console.log("[AUTH] User not found for email:", credentials.email);
+          return null;
+        }
 
-        if (!isValid) return null;
+        if (!user.passwordHash) {
+          console.log("[AUTH] User has no password hash (OAuth-only account)");
+          return null;
+        }
 
+        try {
+          const isValid = await bcrypt.compare(
+            credentials.password as string,
+            user.passwordHash
+          );
+
+          if (!isValid) {
+            console.log("[AUTH] Password mismatch for:", credentials.email);
+            return null;
+          }
+        } catch (err: any) {
+          console.error("[AUTH] bcrypt compare error:", err.message);
+          return null;
+        }
+
+        console.log("[AUTH] Login success for:", credentials.email);
         return {
           id: user.id,
           email: user.email,
