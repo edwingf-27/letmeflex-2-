@@ -3,6 +3,8 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateImage } from "@/lib/image-gen";
+
+export const maxDuration = 60;
 import { faceSwapWithFal } from "@/lib/image-gen/providers/fal";
 import { buildPrompt } from "@/lib/image-gen/prompts/builders";
 import { uploadGeneratedImage } from "@/lib/supabase";

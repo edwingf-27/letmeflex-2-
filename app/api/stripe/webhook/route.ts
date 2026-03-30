@@ -3,6 +3,8 @@ import { headers } from "next/headers";
 import Stripe from "stripe";
 import { stripe, PLANS, CREDIT_PACKS, type PlanKey } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
+
+export const maxDuration = 30;
 import {
   sendPaymentConfirmationEmail,
   sendPaymentFailedEmail,
