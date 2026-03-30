@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 import { stripe, PLANS, CREDIT_PACKS, type PlanKey } from "@/lib/stripe";
 
 const purchaseSchema = z.discriminatedUnion("type", [
@@ -32,12 +32,13 @@ export async function POST(req: Request) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { id: true, email: true, stripeCustomerId: true },
-    });
+    const { data: user, error: userError } = await db
+      .from("User")
+      .select("id, email, stripeCustomerId")
+      .eq("id", session.user.id)
+      .single();
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 

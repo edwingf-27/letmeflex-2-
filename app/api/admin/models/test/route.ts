@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 import { generateWithFal } from "@/lib/image-gen/providers/fal";
 import { generateWithReplicate } from "@/lib/image-gen/providers/replicate";
 import { generateWithOpenAI } from "@/lib/image-gen/providers/openai";
@@ -17,9 +17,11 @@ export async function POST(req: Request) {
 
     const { modelId: configId } = await req.json();
 
-    const model = await prisma.modelConfig.findUnique({
-      where: { id: configId },
-    });
+    const { data: model } = await db
+      .from("ModelConfig")
+      .select("*")
+      .eq("id", configId)
+      .single();
 
     if (!model) {
       return NextResponse.json({ error: "Model not found" }, { status: 404 });
@@ -47,10 +49,10 @@ export async function POST(req: Request) {
 
     // Update avg seconds
     const avgSeconds = Math.round(result.durationMs / 1000);
-    await prisma.modelConfig.update({
-      where: { id: configId },
-      data: { avgSeconds },
-    });
+    await db
+      .from("ModelConfig")
+      .update({ avgSeconds })
+      .eq("id", configId);
 
     return NextResponse.json({
       imageUrl: result.imageUrl,

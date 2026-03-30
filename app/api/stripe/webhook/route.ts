@@ -2,14 +2,13 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import Stripe from "stripe";
 import { stripe, PLANS, CREDIT_PACKS, type PlanKey } from "@/lib/stripe";
-import { prisma } from "@/lib/prisma";
+import { db, generateId } from "@/lib/db";
 
 export const maxDuration = 30;
 import {
   sendPaymentConfirmationEmail,
   sendPaymentFailedEmail,
 } from "@/lib/resend";
-import type { Plan } from "@prisma/client";
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
@@ -106,50 +105,52 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         ? session.subscription
         : session.subscription?.id;
 
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        plan: planKey as Plan,
+    const { data: updatedUser } = await db
+      .from("User")
+      .update({
+        plan: planKey,
         credits: plan.credits,
         stripeCustomerId: customerId || undefined,
         stripeSubscriptionId: subscriptionId || undefined,
         subscriptionStatus: "active",
-      },
-    });
+      })
+      .eq("id", userId)
+      .select()
+      .single();
 
     // Create order record
-    await prisma.order.create({
-      data: {
-        userId,
-        stripeSessionId: session.id,
-        amount: session.amount_total || 0,
-        credits: plan.credits,
-        status: "COMPLETED",
-        type: "SUBSCRIPTION",
-      },
+    await db.from("Order").insert({
+      id: generateId(),
+      userId,
+      stripeSessionId: session.id,
+      amount: session.amount_total || 0,
+      credits: plan.credits,
+      status: "COMPLETED",
+      type: "SUBSCRIPTION",
     });
 
     // Log credit addition
-    await prisma.creditLog.create({
-      data: {
-        userId,
-        amount: plan.credits,
-        reason: `subscription_${planKey.toLowerCase()}`,
-        referenceId: session.id,
-      },
+    await db.from("CreditLog").insert({
+      id: generateId(),
+      userId,
+      amount: plan.credits,
+      reason: `subscription_${planKey.toLowerCase()}`,
+      referenceId: session.id,
     });
 
     // Send confirmation email (fire and forget)
-    const amountStr = session.amount_total
-      ? `$${(session.amount_total / 100).toFixed(2)}`
-      : `$${plan.price.toFixed(2)}`;
+    if (updatedUser) {
+      const amountStr = session.amount_total
+        ? `$${(session.amount_total / 100).toFixed(2)}`
+        : `$${plan.price.toFixed(2)}`;
 
-    sendPaymentConfirmationEmail(
-      updatedUser.email,
-      amountStr,
-      plan.credits,
-      updatedUser.credits
-    ).catch(() => {});
+      sendPaymentConfirmationEmail(
+        updatedUser.email,
+        amountStr,
+        plan.credits,
+        updatedUser.credits
+      ).catch(() => {});
+    }
   } else if (type === "credit_pack") {
     const packId = session.metadata?.packId;
     const credits = parseInt(session.metadata?.credits || "0", 10);
@@ -159,48 +160,60 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       return;
     }
 
-    const updatedUser = await prisma.$transaction(async (tx) => {
-      const updated = await tx.user.update({
-        where: { id: userId },
-        data: {
-          credits: { increment: credits },
-          stripeCustomerId: customerId || undefined,
-        },
-      });
+    // Get current user to increment credits
+    const { data: currentUser } = await db
+      .from("User")
+      .select("credits, email")
+      .eq("id", userId)
+      .single();
 
-      await tx.creditLog.create({
-        data: {
-          userId,
-          amount: credits,
-          reason: "credit_pack_purchase",
-          referenceId: session.id,
-        },
-      });
+    if (!currentUser) {
+      console.error("[WEBHOOK] User not found:", userId);
+      return;
+    }
 
-      await tx.order.create({
-        data: {
-          userId,
-          stripeSessionId: session.id,
-          amount: session.amount_total || 0,
-          credits,
-          status: "COMPLETED",
-          type: "CREDIT_PACK",
-        },
-      });
+    const newCredits = (currentUser.credits || 0) + credits;
 
-      return updated;
+    const { data: updatedUser } = await db
+      .from("User")
+      .update({
+        credits: newCredits,
+        stripeCustomerId: customerId || undefined,
+      })
+      .eq("id", userId)
+      .select()
+      .single();
+
+    await db.from("CreditLog").insert({
+      id: generateId(),
+      userId,
+      amount: credits,
+      reason: "credit_pack_purchase",
+      referenceId: session.id,
     });
 
-    const amountStr = session.amount_total
-      ? `$${(session.amount_total / 100).toFixed(2)}`
-      : "N/A";
-
-    sendPaymentConfirmationEmail(
-      updatedUser.email,
-      amountStr,
+    await db.from("Order").insert({
+      id: generateId(),
+      userId,
+      stripeSessionId: session.id,
+      amount: session.amount_total || 0,
       credits,
-      updatedUser.credits
-    ).catch(() => {});
+      status: "COMPLETED",
+      type: "CREDIT_PACK",
+    });
+
+    if (updatedUser) {
+      const amountStr = session.amount_total
+        ? `$${(session.amount_total / 100).toFixed(2)}`
+        : "N/A";
+
+      sendPaymentConfirmationEmail(
+        updatedUser.email,
+        amountStr,
+        credits,
+        updatedUser.credits
+      ).catch(() => {});
+    }
   }
 }
 
@@ -208,26 +221,26 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   const userId = subscription.metadata?.userId;
   if (!userId) return;
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
+  await db
+    .from("User")
+    .update({
       subscriptionStatus: subscription.status,
-    },
-  });
+    })
+    .eq("id", userId);
 }
 
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   const userId = subscription.metadata?.userId;
   if (!userId) return;
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
+  await db
+    .from("User")
+    .update({
       plan: "FREE",
       stripeSubscriptionId: null,
       subscriptionStatus: "canceled",
-    },
-  });
+    })
+    .eq("id", userId);
 }
 
 async function handlePaymentFailed(invoice: Stripe.Invoice) {
@@ -238,10 +251,11 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
 
   if (!customerId) return;
 
-  const user = await prisma.user.findUnique({
-    where: { stripeCustomerId: customerId },
-    select: { email: true },
-  });
+  const { data: user } = await db
+    .from("User")
+    .select("email")
+    .eq("stripeCustomerId", customerId)
+    .single();
 
   if (user) {
     sendPaymentFailedEmail(user.email).catch(() => {});

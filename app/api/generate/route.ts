@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { db, generateId } from "@/lib/db";
 import { generateImage } from "@/lib/image-gen";
 
 export const maxDuration = 60;
@@ -43,28 +43,23 @@ export async function POST(req: Request) {
     const { category, subcategory, model, brand, color, city, shot, isFaceSwap, faceInputUrl } =
       parsed.data;
 
-    // Validate category exists
     if (!CATEGORIES[category]) {
-      return NextResponse.json(
-        { error: "Invalid category" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid category" }, { status: 400 });
     }
 
-    // Determine credit cost
     const creditCost = isFaceSwap ? 2 : 1;
 
-    // Get current user data
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { id: true, credits: true, plan: true, email: true },
-    });
+    // Get current user
+    const { data: user } = await db
+      .from("User")
+      .select("id, credits, plan, email")
+      .eq("id", session.user.id)
+      .single();
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Check sufficient credits
     if (user.credits < creditCost) {
       return NextResponse.json(
         { error: "Insufficient credits", required: creditCost, available: user.credits },
@@ -72,7 +67,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Face swap requires STARTER+ plan
     if (isFaceSwap && user.plan === "FREE") {
       return NextResponse.json(
         { error: "Face swap requires a Starter plan or above." },
@@ -87,146 +81,101 @@ export async function POST(req: Request) {
       );
     }
 
-    // Build the prompt
     const { prompt, negativePrompt } = buildPrompt(category, {
       subcategory: subcategory || "",
-      model,
-      brand,
-      color,
-      city,
-      shot,
+      model, brand, color, city, shot,
     });
 
-    // Create generation record (PENDING)
-    const generation = await prisma.generation.create({
-      data: {
-        userId: user.id,
-        category,
-        subcategory,
-        prompt,
-        negativePrompt,
-        creditsUsed: creditCost,
-        isFaceSwap,
-        faceInputUrl: faceInputUrl || null,
-        status: "PENDING",
-      },
+    const generationId = generateId();
+
+    // Create generation record
+    await db.from("Generation").insert({
+      id: generationId,
+      userId: user.id,
+      category,
+      subcategory: subcategory || null,
+      prompt,
+      negativePrompt,
+      creditsUsed: creditCost,
+      isFaceSwap,
+      faceInputUrl: faceInputUrl || null,
+      status: "PENDING",
     });
 
-    // Deduct credits atomically
-    const updatedUser = await prisma.$transaction(async (tx) => {
-      const updated = await tx.user.update({
-        where: { id: user.id, credits: { gte: creditCost } },
-        data: { credits: { decrement: creditCost } },
-      });
+    // Deduct credits
+    const newCredits = user.credits - creditCost;
+    await db.from("User").update({ credits: newCredits }).eq("id", user.id);
 
-      await tx.creditLog.create({
-        data: {
-          userId: user.id,
-          amount: -creditCost,
-          reason: isFaceSwap ? "generation_face_swap" : "generation",
-          referenceId: generation.id,
-        },
-      });
-
-      return updated;
+    await db.from("CreditLog").insert({
+      id: generateId(),
+      userId: user.id,
+      amount: -creditCost,
+      reason: isFaceSwap ? "generation_face_swap" : "generation",
+      referenceId: generationId,
     });
 
-    // Check low credits (fire and forget)
-    if (updatedUser.credits === 1) {
+    // Low credits warning
+    if (newCredits === 1) {
       sendLowCreditsEmail(user.email, 1).catch(() => {});
     }
 
     // Mark as PROCESSING
-    await prisma.generation.update({
-      where: { id: generation.id },
-      data: { status: "PROCESSING" },
-    });
+    await db.from("Generation").update({ status: "PROCESSING" }).eq("id", generationId);
 
     try {
-      // Generate image
       let result = await generateImage({ prompt, negativePrompt });
 
-      // Face swap if requested
       if (isFaceSwap && faceInputUrl) {
         result = await faceSwapWithFal(result.imageUrl, faceInputUrl);
       }
 
-      // Download generated image and upload to Supabase storage
       const imageResponse = await fetch(result.imageUrl);
-      if (!imageResponse.ok) {
-        throw new Error("Failed to download generated image");
-      }
-      const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
-      const publicUrl = await uploadGeneratedImage(
-        user.id,
-        generation.id,
-        imageBuffer
-      );
+      if (!imageResponse.ok) throw new Error("Failed to download generated image");
 
-      // Update generation to COMPLETED
-      const completedGeneration = await prisma.generation.update({
-        where: { id: generation.id },
-        data: {
-          status: "COMPLETED",
-          imageUrl: publicUrl,
-          modelUsed: result.modelUsed,
-          modelProvider: result.provider,
-          metadata: {
-            durationMs: result.durationMs,
-            originalUrl: result.imageUrl,
-          },
-        },
-      });
+      const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+      const publicUrl = await uploadGeneratedImage(user.id, generationId, imageBuffer);
+
+      // Update to COMPLETED
+      await db.from("Generation").update({
+        status: "COMPLETED",
+        imageUrl: publicUrl,
+        modelUsed: result.modelUsed,
+        modelProvider: result.provider,
+        metadata: { durationMs: result.durationMs, originalUrl: result.imageUrl },
+      }).eq("id", generationId);
 
       return NextResponse.json({
-        id: completedGeneration.id,
-        status: completedGeneration.status,
-        imageUrl: completedGeneration.imageUrl,
+        id: generationId,
+        status: "COMPLETED",
+        imageUrl: publicUrl,
         creditsUsed: creditCost,
-        creditsRemaining: updatedUser.credits,
+        creditsRemaining: newCredits,
       });
-    } catch (genError) {
-      console.error("[GENERATION_ERROR]", genError);
+    } catch (genError: any) {
+      console.error("[GENERATION_ERROR]", genError?.message);
 
-      // Refund credits on generation failure
-      await prisma.$transaction(async (tx) => {
-        await tx.user.update({
-          where: { id: user.id },
-          data: { credits: { increment: creditCost } },
-        });
-
-        await tx.creditLog.create({
-          data: {
-            userId: user.id,
-            amount: creditCost,
-            reason: "generation_refund",
-            referenceId: generation.id,
-          },
-        });
+      // Refund credits
+      await db.from("User").update({ credits: user.credits }).eq("id", user.id);
+      await db.from("CreditLog").insert({
+        id: generateId(),
+        userId: user.id,
+        amount: creditCost,
+        reason: "generation_refund",
+        referenceId: generationId,
       });
 
-      // Mark generation as FAILED
-      await prisma.generation.update({
-        where: { id: generation.id },
-        data: {
-          status: "FAILED",
-          metadata: {
-            error:
-              genError instanceof Error ? genError.message : "Unknown error",
-          },
-        },
-      });
+      await db.from("Generation").update({
+        status: "FAILED",
+        metadata: { error: genError?.message || "Unknown error" },
+      }).eq("id", generationId);
 
       return NextResponse.json(
         { error: "Image generation failed. Credits have been refunded." },
         { status: 500 }
       );
     }
-  } catch (error) {
-    console.error("[GENERATE_ROUTE_ERROR]", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+  } catch (error: any) {
+    console.error("[GENERATE_ROUTE_ERROR]", error?.message);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

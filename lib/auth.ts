@@ -1,13 +1,10 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
-import { PrismaAdapter } from "@auth/prisma-adapter";
-import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import type { Plan, Role } from "@prisma/client";
+import { db, generateId } from "@/lib/db";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PrismaAdapter(prisma) as any,
   session: { strategy: "jwt" },
   pages: {
     signIn: "/login",
@@ -15,8 +12,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   providers: [
     Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      clientId: process.env.GOOGLE_CLIENT_ID || "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
     }),
     Credentials({
       name: "credentials",
@@ -27,9 +24,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
-        });
+        const { data: user } = await db
+          .from("User")
+          .select("id, email, name, image, passwordHash")
+          .eq("email", credentials.email as string)
+          .single();
 
         if (!user || !user.passwordHash) return null;
 
@@ -52,9 +51,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     async jwt({ token, user, trigger, session }) {
       if (user) {
-        const dbUser = await prisma.user.findUnique({
-          where: { email: user.email! },
-        });
+        const { data: dbUser } = await db
+          .from("User")
+          .select("id, role, credits, plan, referralCode")
+          .eq("email", user.email!)
+          .single();
+
         if (dbUser) {
           token.id = dbUser.id;
           token.role = dbUser.role;
@@ -72,32 +74,44 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
-        session.user.role = token.role as Role;
+        session.user.role = token.role as any;
         session.user.credits = token.credits as number;
-        session.user.plan = token.plan as Plan;
+        session.user.plan = token.plan as any;
         session.user.referralCode = token.referralCode as string;
       }
       return session;
     },
-  },
-  events: {
-    async createUser({ user }) {
-      if (!user.id || !user.email) return;
-      // Award signup bonus credits
-      await prisma.creditLog.create({
-        data: {
-          userId: user.id,
-          amount: 3,
-          reason: "signup_bonus",
-        },
-      });
-      // Send welcome email (fire and forget)
-      try {
-        const { sendWelcomeEmail } = await import("@/lib/resend");
-        await sendWelcomeEmail(user.email, user.name || undefined);
-      } catch {
-        // Non-critical — don't block signup
+    async signIn({ user, account }) {
+      // Handle Google OAuth - create user if not exists
+      if (account?.provider === "google" && user.email) {
+        const { data: existing } = await db
+          .from("User")
+          .select("id")
+          .eq("email", user.email)
+          .single();
+
+        if (!existing) {
+          const userId = generateId();
+          await db.from("User").insert({
+            id: userId,
+            email: user.email,
+            name: user.name || null,
+            image: user.image || null,
+            credits: 3,
+            referralCode: generateId(),
+            role: "USER",
+            plan: "FREE",
+            updatedAt: new Date().toISOString(),
+          });
+          await db.from("CreditLog").insert({
+            id: generateId(),
+            userId,
+            amount: 3,
+            reason: "signup_bonus",
+          });
+        }
       }
+      return true;
     },
   },
 });

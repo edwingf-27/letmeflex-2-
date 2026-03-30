@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 import { generateWithFal } from "./providers/fal";
 import { generateWithReplicate } from "./providers/replicate";
 import { generateWithOpenAI } from "./providers/openai";
@@ -9,9 +9,12 @@ export type { GenerationRequest, GenerationResult };
 export async function generateImage(
   req: GenerationRequest
 ): Promise<GenerationResult> {
-  const activeModel = await prisma.modelConfig.findFirst({
-    where: { isDefault: true, isActive: true },
-  });
+  const { data: activeModel } = await db
+    .from("ModelConfig")
+    .select("*")
+    .eq("isDefault", true)
+    .eq("isActive", true)
+    .single();
 
   if (!activeModel) {
     // Fallback to fal.ai flux/dev

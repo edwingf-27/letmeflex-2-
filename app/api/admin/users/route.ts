@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { db, generateId } from "@/lib/db";
 
 export async function GET(req: Request) {
   try {
@@ -19,43 +19,55 @@ export async function GET(req: Request) {
     );
     const skip = (page - 1) * limit;
 
-    const where = search
-      ? {
-          OR: [
-            { email: { contains: search, mode: "insensitive" as const } },
-            { name: { contains: search, mode: "insensitive" as const } },
-          ],
-        }
-      : {};
+    // Build query
+    let usersQuery = db
+      .from("User")
+      .select("id, name, email, image, role, credits, plan, subscriptionStatus, referralCode, createdAt")
+      .order("createdAt", { ascending: false })
+      .range(skip, skip + limit - 1);
 
-    const [users, total] = await prisma.$transaction([
-      prisma.user.findMany({
-        where,
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          image: true,
-          role: true,
-          credits: true,
-          plan: true,
-          subscriptionStatus: true,
-          referralCode: true,
-          createdAt: true,
-          _count: { select: { generations: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        skip,
-        take: limit,
-      }),
-      prisma.user.count({ where }),
+    let countQuery = db
+      .from("User")
+      .select("*", { count: "exact", head: true });
+
+    if (search) {
+      usersQuery = usersQuery.or(
+        `email.ilike.%${search}%,name.ilike.%${search}%`
+      );
+      countQuery = countQuery.or(
+        `email.ilike.%${search}%,name.ilike.%${search}%`
+      );
+    }
+
+    const [usersResult, countResult] = await Promise.all([
+      usersQuery,
+      countQuery,
     ]);
 
+    const users = usersResult.data || [];
+    const total = countResult.count ?? 0;
+
+    // Get generation counts for these users
+    const userIds = users.map((u: any) => u.id);
+    let generationCounts: Record<string, number> = {};
+
+    if (userIds.length > 0) {
+      const { data: genData } = await db
+        .from("Generation")
+        .select("userId")
+        .in("userId", userIds);
+
+      if (genData) {
+        for (const g of genData) {
+          generationCounts[g.userId] = (generationCounts[g.userId] || 0) + 1;
+        }
+      }
+    }
+
     return NextResponse.json({
-      users: users.map((u) => ({
+      users: users.map((u: any) => ({
         ...u,
-        generationCount: u._count.generations,
-        _count: undefined,
+        generationCount: generationCounts[u.id] || 0,
       })),
       pagination: {
         page,
@@ -114,40 +126,38 @@ export async function PATCH(req: Request) {
     // If credits are being changed, log the delta before updating
     let creditDelta = 0;
     if (credits !== undefined) {
-      const currentUser = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { credits: true },
-      });
+      const { data: currentUser } = await db
+        .from("User")
+        .select("credits")
+        .eq("id", userId)
+        .single();
       creditDelta = credits - (currentUser?.credits || 0);
     }
 
-    const updatedUser = await prisma.$transaction(async (tx) => {
-      const updated = await tx.user.update({
-        where: { id: userId },
-        data: updateData,
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          credits: true,
-          plan: true,
-        },
+    const { data: updatedUser, error: updateError } = await db
+      .from("User")
+      .update(updateData)
+      .eq("id", userId)
+      .select("id, name, email, role, credits, plan")
+      .single();
+
+    if (updateError) {
+      console.error("[ADMIN_USERS_UPDATE_ERROR]", updateError);
+      return NextResponse.json(
+        { error: "Failed to update user" },
+        { status: 500 }
+      );
+    }
+
+    if (credits !== undefined && creditDelta !== 0) {
+      await db.from("CreditLog").insert({
+        id: generateId(),
+        userId,
+        amount: creditDelta,
+        reason: "admin_adjustment",
+        referenceId: session.user.id,
       });
-
-      if (credits !== undefined && creditDelta !== 0) {
-        await tx.creditLog.create({
-          data: {
-            userId,
-            amount: creditDelta,
-            reason: "admin_adjustment",
-            referenceId: session.user.id,
-          },
-        });
-      }
-
-      return updated;
-    });
+    }
 
     return NextResponse.json({ user: updatedUser });
   } catch (error) {

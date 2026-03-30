@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 
 export async function GET(req: Request) {
   try {
@@ -13,38 +13,28 @@ export async function GET(req: Request) {
     const all = searchParams.get("all") === "true";
     const category = searchParams.get("category");
 
-    const where: any = {
-      userId: session.user.id,
-      deleted: false,
-    };
+    let query = db
+      .from("Generation")
+      .select("id, category, subcategory, imageUrl, thumbnailUrl, status, creditsUsed, isFaceSwap, createdAt")
+      .eq("userId", session.user.id)
+      .eq("deleted", false)
+      .order("createdAt", { ascending: false })
+      .limit(all ? 100 : 8);
 
     if (category && category !== "all") {
-      where.category = category;
+      query = query.eq("category", category);
     }
 
-    const generations = await prisma.generation.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      take: all ? 100 : 8,
-      select: {
-        id: true,
-        category: true,
-        subcategory: true,
-        imageUrl: true,
-        thumbnailUrl: true,
-        status: true,
-        creditsUsed: true,
-        isFaceSwap: true,
-        createdAt: true,
-      },
-    });
+    const { data: generations, error } = await query;
 
-    return NextResponse.json(generations);
-  } catch (error) {
-    console.error("Error fetching generations:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    if (error) {
+      console.error("Error fetching generations:", error.message);
+      return NextResponse.json([], { status: 200 });
+    }
+
+    return NextResponse.json(generations || []);
+  } catch (error: any) {
+    console.error("Error fetching generations:", error?.message);
+    return NextResponse.json([], { status: 200 });
   }
 }

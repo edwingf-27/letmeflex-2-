@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 
 export async function GET() {
   try {
@@ -9,22 +9,29 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const [totalReferrals, referralCredits] = await Promise.all([
-      prisma.user.count({
-        where: { referredById: session.user.id },
-      }),
-      prisma.creditLog.aggregate({
-        where: {
-          userId: session.user.id,
-          reason: "referral_bonus",
-        },
-        _sum: { amount: true },
-      }),
+    const [referralCountResult, referralCreditsResult] = await Promise.all([
+      db
+        .from("User")
+        .select("*", { count: "exact", head: true })
+        .eq("referredById", session.user.id),
+      db
+        .from("CreditLog")
+        .select("amount")
+        .eq("userId", session.user.id)
+        .eq("reason", "referral_bonus"),
     ]);
+
+    const totalReferrals = referralCountResult.count ?? 0;
+
+    // Sum up the amounts in JS
+    const creditsEarned = (referralCreditsResult.data || []).reduce(
+      (sum: number, log: { amount: number }) => sum + (log.amount || 0),
+      0
+    );
 
     return NextResponse.json({
       totalReferrals,
-      creditsEarned: referralCredits._sum.amount || 0,
+      creditsEarned,
     });
   } catch (error) {
     console.error("Error fetching referral stats:", error);

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 
 const referralSchema = z.object({
   referralCode: z.string().min(1, "Referral code is required"),
@@ -20,12 +20,13 @@ export async function POST(req: Request) {
 
     const { referralCode } = parsed.data;
 
-    const referrer = await prisma.user.findUnique({
-      where: { referralCode },
-      select: { id: true, name: true },
-    });
+    const { data: referrer, error } = await db
+      .from("User")
+      .select("id, name")
+      .eq("referralCode", referralCode)
+      .single();
 
-    if (!referrer) {
+    if (error || !referrer) {
       return NextResponse.json(
         { valid: false, error: "Invalid referral code" },
         { status: 404 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 
 export async function GET(req: Request) {
   try {
@@ -14,23 +14,34 @@ export async function GET(req: Request) {
     const limit = parseInt(searchParams.get("limit") || "20");
     const status = searchParams.get("status");
     const category = searchParams.get("category");
+    const skip = (page - 1) * limit;
 
-    const where: any = {};
-    if (status) where.status = status;
-    if (category) where.category = category;
+    let query = db
+      .from("Generation")
+      .select("*, user:User!userId(email, name)")
+      .order("createdAt", { ascending: false })
+      .range(skip, skip + limit - 1);
 
-    const [generations, total] = await Promise.all([
-      prisma.generation.findMany({
-        where,
-        include: {
-          user: { select: { email: true, name: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.generation.count({ where }),
+    let countQuery = db
+      .from("Generation")
+      .select("*", { count: "exact", head: true });
+
+    if (status) {
+      query = query.eq("status", status);
+      countQuery = countQuery.eq("status", status);
+    }
+    if (category) {
+      query = query.eq("category", category);
+      countQuery = countQuery.eq("category", category);
+    }
+
+    const [generationsResult, countResult] = await Promise.all([
+      query,
+      countQuery,
     ]);
+
+    const generations = generationsResult.data || [];
+    const total = countResult.count ?? 0;
 
     return NextResponse.json({
       generations,
@@ -62,15 +73,19 @@ export async function PATCH(req: Request) {
     }
 
     if (action === "delete") {
-      await prisma.generation.update({
-        where: { id },
-        data: { deleted: true, imageUrl: null },
-      });
+      await db
+        .from("Generation")
+        .update({ deleted: true, imageUrl: null })
+        .eq("id", id);
 
       // Optionally delete from storage
       try {
         const { deleteGeneratedImage } = await import("@/lib/supabase");
-        const gen = await prisma.generation.findUnique({ where: { id } });
+        const { data: gen } = await db
+          .from("Generation")
+          .select("userId, id")
+          .eq("id", id)
+          .single();
         if (gen) {
           await deleteGeneratedImage(gen.userId, gen.id);
         }
@@ -82,28 +97,28 @@ export async function PATCH(req: Request) {
     }
 
     if (action === "flag") {
-      await prisma.generation.update({
-        where: { id },
-        data: {
+      await db
+        .from("Generation")
+        .update({
           metadata: {
             flagged: true,
             flaggedAt: new Date().toISOString(),
             flaggedBy: session.user.id,
           },
-        },
-      });
+        })
+        .eq("id", id);
       return NextResponse.json({ success: true });
     }
 
     if (action === "unflag") {
-      await prisma.generation.update({
-        where: { id },
-        data: {
+      await db
+        .from("Generation")
+        .update({
           metadata: {
             flagged: false,
           },
-        },
-      });
+        })
+        .eq("id", id);
       return NextResponse.json({ success: true });
     }
 

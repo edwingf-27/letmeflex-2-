@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { db, generateId } from "@/lib/db";
 
 async function checkAdmin() {
   const session = await auth();
@@ -18,11 +18,17 @@ export async function GET() {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const models = await prisma.modelConfig.findMany({
-      orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
-    });
+    const { data: models, error } = await db
+      .from("ModelConfig")
+      .select("*")
+      .order("isDefault", { ascending: false })
+      .order("createdAt", { ascending: false });
 
-    return NextResponse.json({ models });
+    if (error) {
+      throw error;
+    }
+
+    return NextResponse.json({ models: models || [] });
   } catch (error) {
     console.error("[ADMIN_MODELS_GET_ERROR]", error);
     return NextResponse.json(
@@ -64,13 +70,21 @@ export async function POST(req: Request) {
 
     // If this is being set as default, unset existing defaults
     if (data.isDefault) {
-      await prisma.modelConfig.updateMany({
-        where: { isDefault: true },
-        data: { isDefault: false },
-      });
+      await db
+        .from("ModelConfig")
+        .update({ isDefault: false })
+        .eq("isDefault", true);
     }
 
-    const model = await prisma.modelConfig.create({ data });
+    const { data: model, error } = await db
+      .from("ModelConfig")
+      .insert({ id: generateId(), ...data })
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
 
     return NextResponse.json({ model }, { status: 201 });
   } catch (error) {
@@ -115,16 +129,23 @@ export async function PATCH(req: Request) {
 
     // If setting as default, ensure only one default
     if (updateData.isDefault === true) {
-      await prisma.modelConfig.updateMany({
-        where: { isDefault: true, id: { not: id } },
-        data: { isDefault: false },
-      });
+      await db
+        .from("ModelConfig")
+        .update({ isDefault: false })
+        .eq("isDefault", true)
+        .neq("id", id);
     }
 
-    const model = await prisma.modelConfig.update({
-      where: { id },
-      data: updateData,
-    });
+    const { data: model, error } = await db
+      .from("ModelConfig")
+      .update(updateData)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
 
     return NextResponse.json({ model });
   } catch (error) {
@@ -153,7 +174,11 @@ export async function DELETE(req: Request) {
       );
     }
 
-    await prisma.modelConfig.delete({ where: { id } });
+    const { error } = await db.from("ModelConfig").delete().eq("id", id);
+
+    if (error) {
+      throw error;
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

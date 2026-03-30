@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { stripe } from "@/lib/stripe";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 
 export async function POST() {
   try {
@@ -10,11 +10,13 @@ export async function POST() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-    });
+    const { data: user, error: userError } = await db
+      .from("User")
+      .select("*")
+      .eq("id", session.user.id)
+      .single();
 
-    if (!user?.stripeCustomerId) {
+    if (userError || !user?.stripeCustomerId) {
       return NextResponse.json(
         { error: "No billing account found" },
         { status: 400 }

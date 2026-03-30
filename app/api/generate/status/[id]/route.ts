@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 
 export async function GET(
   _req: Request,
@@ -12,30 +12,19 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id } = params;
+    const { data: generation, error } = await db
+      .from("Generation")
+      .select("id, status, imageUrl, userId, category, subcategory, createdAt, modelUsed")
+      .eq("id", params.id)
+      .single();
 
-    const generation = await prisma.generation.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        status: true,
-        imageUrl: true,
-        userId: true,
-        category: true,
-        subcategory: true,
-        createdAt: true,
-        modelUsed: true,
-      },
-    });
-
-    if (!generation) {
+    if (error || !generation) {
       return NextResponse.json(
         { error: "Generation not found" },
         { status: 404 }
       );
     }
 
-    // Verify ownership
     if (generation.userId !== session.user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -49,8 +38,8 @@ export async function GET(
       createdAt: generation.createdAt,
       modelUsed: generation.modelUsed,
     });
-  } catch (error) {
-    console.error("[GENERATION_STATUS_ERROR]", error);
+  } catch (error: any) {
+    console.error("[GENERATION_STATUS_ERROR]", error?.message);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

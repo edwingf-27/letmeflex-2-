@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 
 export async function GET(req: Request) {
   try {
@@ -12,18 +12,23 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
+    const skip = (page - 1) * limit;
 
-    const [logs, total] = await Promise.all([
-      prisma.creditLog.findMany({
-        where: { userId: session.user.id },
-        orderBy: { createdAt: "desc" },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.creditLog.count({
-        where: { userId: session.user.id },
-      }),
+    const [logsResult, countResult] = await Promise.all([
+      db
+        .from("CreditLog")
+        .select("*")
+        .eq("userId", session.user.id)
+        .order("createdAt", { ascending: false })
+        .range(skip, skip + limit - 1),
+      db
+        .from("CreditLog")
+        .select("*", { count: "exact", head: true })
+        .eq("userId", session.user.id),
     ]);
+
+    const logs = logsResult.data || [];
+    const total = countResult.count ?? 0;
 
     return NextResponse.json({
       logs,

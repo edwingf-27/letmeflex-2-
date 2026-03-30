@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 
 export async function GET(req: Request) {
   try {
@@ -12,18 +12,21 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
+    const skip = (page - 1) * limit;
 
-    const [orders, total] = await Promise.all([
-      prisma.order.findMany({
-        include: {
-          user: { select: { email: true, name: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.order.count(),
+    const [ordersResult, countResult] = await Promise.all([
+      db
+        .from("Order")
+        .select("*, user:User!userId(email, name)")
+        .order("createdAt", { ascending: false })
+        .range(skip, skip + limit - 1),
+      db
+        .from("Order")
+        .select("*", { count: "exact", head: true }),
     ]);
+
+    const orders = ordersResult.data || [];
+    const total = countResult.count ?? 0;
 
     return NextResponse.json({
       orders,

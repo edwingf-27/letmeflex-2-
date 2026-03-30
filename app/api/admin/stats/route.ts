@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 
 export async function GET() {
   try {
@@ -15,119 +15,116 @@ export async function GET() {
     weekStart.setDate(weekStart.getDate() - 7);
     const thirtyDaysAgo = new Date(todayStart);
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
     // Run all queries in parallel
     const [
-      totalUsers,
-      totalGenerations,
-      todayGenerations,
-      weekGenerations,
-      revenueResult,
-      activeSubscriptions,
-      dailyGenerationsRaw,
-      dailyRevenueRaw,
-      dailySignupsRaw,
+      totalUsersResult,
+      totalGenerationsResult,
+      todayGenerationsResult,
+      weekGenerationsResult,
+      revenueOrders,
+      activeSubUsers,
+      weekGenerationsData,
+      thirtyDayOrders,
+      thirtyDayUsers,
+      mrrOrders,
     ] = await Promise.all([
       // Total users
-      prisma.user.count(),
+      db.from("User").select("*", { count: "exact", head: true }),
 
-      // Total generations
-      prisma.generation.count({ where: { status: "COMPLETED" } }),
+      // Total completed generations
+      db.from("Generation").select("*", { count: "exact", head: true }).eq("status", "COMPLETED"),
 
       // Today's generations
-      prisma.generation.count({
-        where: {
-          status: "COMPLETED",
-          createdAt: { gte: todayStart },
-        },
-      }),
+      db.from("Generation").select("*", { count: "exact", head: true })
+        .eq("status", "COMPLETED")
+        .gte("createdAt", todayStart.toISOString()),
 
       // This week's generations
-      prisma.generation.count({
-        where: {
-          status: "COMPLETED",
-          createdAt: { gte: weekStart },
-        },
-      }),
+      db.from("Generation").select("*", { count: "exact", head: true })
+        .eq("status", "COMPLETED")
+        .gte("createdAt", weekStart.toISOString()),
 
-      // Total revenue (sum of completed orders)
-      prisma.order.aggregate({
-        _sum: { amount: true },
-        where: { status: "COMPLETED" },
-      }),
+      // Total revenue (all completed orders)
+      db.from("Order").select("amount").eq("status", "COMPLETED"),
 
       // Active subscriptions by plan
-      prisma.user.groupBy({
-        by: ["plan"],
-        _count: true,
-        where: {
-          plan: { not: "FREE" },
-          subscriptionStatus: "active",
-        },
-      }),
+      db.from("User").select("plan")
+        .neq("plan", "FREE")
+        .eq("subscriptionStatus", "active"),
 
-      // Daily generations (last 7 days)
-      prisma.$queryRaw<{ date: string; count: bigint }[]>`
-        SELECT DATE(created_at) as date, COUNT(*) as count
-        FROM "Generation"
-        WHERE status = 'COMPLETED' AND created_at >= ${weekStart}
-        GROUP BY DATE(created_at)
-        ORDER BY date ASC
-      `,
+      // Generations from last 7 days (for daily chart)
+      db.from("Generation").select("createdAt")
+        .eq("status", "COMPLETED")
+        .gte("createdAt", weekStart.toISOString()),
 
-      // Daily revenue (last 30 days)
-      prisma.$queryRaw<{ date: string; total: bigint }[]>`
-        SELECT DATE(created_at) as date, SUM(amount) as total
-        FROM "Order"
-        WHERE status = 'COMPLETED' AND created_at >= ${thirtyDaysAgo}
-        GROUP BY DATE(created_at)
-        ORDER BY date ASC
-      `,
+      // Orders from last 30 days (for daily revenue chart)
+      db.from("Order").select("createdAt, amount")
+        .eq("status", "COMPLETED")
+        .gte("createdAt", thirtyDaysAgo.toISOString()),
 
-      // Daily signups (last 30 days)
-      prisma.$queryRaw<{ date: string; count: bigint }[]>`
-        SELECT DATE(created_at) as date, COUNT(*) as count
-        FROM "User"
-        WHERE created_at >= ${thirtyDaysAgo}
-        GROUP BY DATE(created_at)
-        ORDER BY date ASC
-      `,
+      // Users from last 30 days (for daily signups chart)
+      db.from("User").select("createdAt")
+        .gte("createdAt", thirtyDaysAgo.toISOString()),
+
+      // MRR: subscription orders this month
+      db.from("Order").select("amount")
+        .eq("status", "COMPLETED")
+        .eq("type", "SUBSCRIPTION")
+        .gte("createdAt", monthStart.toISOString()),
     ]);
 
-    // Calculate MRR from active subscriptions
-    const mrrResult = await prisma.order.aggregate({
-      _sum: { amount: true },
-      where: {
-        status: "COMPLETED",
-        type: "SUBSCRIPTION",
-        createdAt: {
-          gte: new Date(now.getFullYear(), now.getMonth(), 1),
-        },
-      },
-    });
+    const totalUsers = totalUsersResult.count ?? 0;
+    const totalGenerations = totalGenerationsResult.count ?? 0;
+    const todayGenerations = todayGenerationsResult.count ?? 0;
+    const weekGenerations = weekGenerationsResult.count ?? 0;
 
-    const totalRevenue = (revenueResult._sum.amount || 0) / 100; // Convert cents to dollars
-    const mrr = (mrrResult._sum.amount || 0) / 100;
+    // Sum revenue
+    const totalRevenue = (revenueOrders.data || []).reduce(
+      (sum: number, o: any) => sum + (o.amount || 0), 0
+    ) / 100;
 
-    // Format daily data, converting BigInt to Number
-    const dailyGenerations = dailyGenerationsRaw.map((d) => ({
-      date: String(d.date),
-      count: Number(d.count),
-    }));
+    // MRR
+    const mrr = (mrrOrders.data || []).reduce(
+      (sum: number, o: any) => sum + (o.amount || 0), 0
+    ) / 100;
 
-    const dailyRevenue = dailyRevenueRaw.map((d) => ({
-      date: String(d.date),
-      total: Number(d.total) / 100,
-    }));
+    // Active subscriptions grouped by plan
+    const subscriptionsByPlan: Record<string, number> = {};
+    for (const u of (activeSubUsers.data || [])) {
+      subscriptionsByPlan[u.plan] = (subscriptionsByPlan[u.plan] || 0) + 1;
+    }
 
-    const dailySignups = dailySignupsRaw.map((d) => ({
-      date: String(d.date),
-      count: Number(d.count),
-    }));
+    // Aggregate daily generations
+    const dailyGenMap: Record<string, number> = {};
+    for (const g of (weekGenerationsData.data || [])) {
+      const date = g.createdAt.substring(0, 10);
+      dailyGenMap[date] = (dailyGenMap[date] || 0) + 1;
+    }
+    const dailyGenerations = Object.entries(dailyGenMap)
+      .map(([date, count]) => ({ date, count }))
+      .sort((a, b) => a.date.localeCompare(b.date));
 
-    const subscriptionsByPlan = Object.fromEntries(
-      activeSubscriptions.map((s) => [s.plan, s._count])
-    );
+    // Aggregate daily revenue
+    const dailyRevMap: Record<string, number> = {};
+    for (const o of (thirtyDayOrders.data || [])) {
+      const date = o.createdAt.substring(0, 10);
+      dailyRevMap[date] = (dailyRevMap[date] || 0) + (o.amount || 0);
+    }
+    const dailyRevenue = Object.entries(dailyRevMap)
+      .map(([date, total]) => ({ date, total: total / 100 }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // Aggregate daily signups
+    const dailySignupMap: Record<string, number> = {};
+    for (const u of (thirtyDayUsers.data || [])) {
+      const date = u.createdAt.substring(0, 10);
+      dailySignupMap[date] = (dailySignupMap[date] || 0) + 1;
+    }
+    const dailySignups = Object.entries(dailySignupMap)
+      .map(([date, count]) => ({ date, count }))
+      .sort((a, b) => a.date.localeCompare(b.date));
 
     return NextResponse.json({
       totalUsers,
