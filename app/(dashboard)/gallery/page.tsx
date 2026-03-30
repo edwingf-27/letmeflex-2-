@@ -39,10 +39,11 @@ export default function GalleryPage() {
     },
   });
 
+  const completedGenerations = generations.filter((g) => g.imageUrl);
   const filteredGenerations =
     activeFilter === "all"
-      ? generations
-      : generations.filter((g) => g.category === activeFilter);
+      ? completedGenerations
+      : completedGenerations.filter((g) => g.category === activeFilter);
 
   const handleDownload = async (imageUrl: string, category: string) => {
     try {
