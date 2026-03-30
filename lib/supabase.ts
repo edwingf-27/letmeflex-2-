@@ -82,6 +82,35 @@ export async function uploadFaceInput(
   return data.signedUrl;
 }
 
+export async function uploadGeneratedImages(
+  userId: string,
+  generationId: string,
+  imageBuffers: Buffer[]
+): Promise<string[]> {
+  const urls: string[] = [];
+
+  for (let i = 0; i < imageBuffers.length; i++) {
+    const path = `${userId}/${generationId}-${i}.webp`;
+
+    const { error } = await supabaseAdmin.storage
+      .from("generations")
+      .upload(path, imageBuffers[i], {
+        contentType: "image/webp",
+        upsert: true,
+      });
+
+    if (error) throw new Error(`Upload failed for image ${i}: ${error.message}`);
+
+    const { data } = supabaseAdmin.storage
+      .from("generations")
+      .getPublicUrl(path);
+
+    urls.push(data.publicUrl);
+  }
+
+  return urls;
+}
+
 export async function deleteGeneratedImage(
   userId: string,
   generationId: string

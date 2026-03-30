@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { generateWithFal } from "@/lib/image-gen/providers/fal";
+import { generateSingleWithFal } from "@/lib/image-gen/providers/fal";
 import { generateWithReplicate } from "@/lib/image-gen/providers/replicate";
 import { generateWithOpenAI } from "@/lib/image-gen/providers/openai";
 
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
 
     switch (model.provider) {
       case "fal":
-        result = await generateWithFal(request, model.modelId);
+        result = await generateSingleWithFal(request, model.modelId);
         break;
       case "replicate":
         result = await generateWithReplicate(request, model.modelId);

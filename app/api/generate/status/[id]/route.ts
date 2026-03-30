@@ -14,7 +14,9 @@ export async function GET(
 
     const { data: generation, error } = await db
       .from("Generation")
-      .select("id, status, imageUrl, userId, category, subcategory, createdAt, modelUsed")
+      .select(
+        "id, status, imageUrl, userId, category, subcategory, createdAt, modelUsed, variationCount, mode, sourceImageUrl, creditsUsed"
+      )
       .eq("id", params.id)
       .single();
 
@@ -29,6 +31,13 @@ export async function GET(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    // Fetch associated GenerationImage rows
+    const { data: images } = await db
+      .from("GenerationImage")
+      .select("id, imageUrl, variationIndex, seed")
+      .eq("generationId", params.id)
+      .order("variationIndex");
+
     return NextResponse.json({
       id: generation.id,
       status: generation.status,
@@ -37,6 +46,11 @@ export async function GET(
       subcategory: generation.subcategory,
       createdAt: generation.createdAt,
       modelUsed: generation.modelUsed,
+      variationCount: generation.variationCount ?? 1,
+      mode: generation.mode ?? "generate",
+      sourceImageUrl: generation.sourceImageUrl ?? null,
+      creditsUsed: generation.creditsUsed ?? 1,
+      images: images || [],
     });
   } catch (error: any) {
     console.error("[GENERATION_STATUS_ERROR]", error?.message);

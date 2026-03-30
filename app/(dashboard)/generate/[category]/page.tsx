@@ -2,8 +2,8 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useState, useCallback, useRef, useEffect } from "react";
-import { CATEGORIES } from "@/types/categories";
+import { useState, useCallback, useRef, useEffect, DragEvent } from "react";
+import { CATEGORIES, GenerationMode } from "@/types/categories";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -15,13 +15,26 @@ import {
   RotateCcw,
   Lock,
   Coins,
-  ScanFace,
+  Upload,
+  ImageIcon,
+  X,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import toast from "react-hot-toast";
 
 type GenerationStatus = "idle" | "generating" | "completed" | "failed";
+
+interface GeneratedImage {
+  url: string;
+  index: number;
+}
+
+const MODE_OPTIONS: { value: GenerationMode; label: string }[] = [
+  { value: "generate", label: "Generate" },
+  { value: "face_swap", label: "Face Swap" },
+  { value: "background_swap", label: "Bg Replace" },
+];
 
 export default function CategoryGeneratePage() {
   const params = useParams();
@@ -39,25 +52,40 @@ export default function CategoryGeneratePage() {
   const [selectedBrand, setSelectedBrand] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
   const [color, setColor] = useState("");
-  const [faceSwap, setFaceSwap] = useState(false);
+
+  // New state
+  const [mode, setMode] = useState<GenerationMode>("generate");
+  const [variationCount, setVariationCount] = useState(1);
+  const [sourceImage, setSourceImage] = useState<File | null>(null);
+  const [sourceImageUrl, setSourceImageUrl] = useState("");
+  const [sourceImagePreview, setSourceImagePreview] = useState<string | null>(null);
+  const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const [status, setStatus] = useState<GenerationStatus>("idle");
-  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(
-    null
-  );
   const [generationId, setGenerationId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const user = session?.user;
   const userPlan = user?.plan ?? "FREE";
-  const canFaceSwap = userPlan !== "FREE";
-  const creditsCost = faceSwap ? 2 : 1;
+  const canAdvancedMode = userPlan !== "FREE";
+  const creditsCost = variationCount;
 
-  // Find the active subcategory object
   const activeSubcategory = category?.subcategories.find(
     (s) => s.id === selectedSubcategory
   );
+
+  // Preview URL for source image
+  useEffect(() => {
+    if (sourceImage) {
+      const url = URL.createObjectURL(sourceImage);
+      setSourceImagePreview(url);
+      return () => URL.revokeObjectURL(url);
+    } else {
+      setSourceImagePreview(null);
+    }
+  }, [sourceImage]);
 
   // Clean up polling on unmount
   useEffect(() => {
@@ -66,35 +94,97 @@ export default function CategoryGeneratePage() {
     };
   }, []);
 
-  const pollStatus = useCallback(
-    (id: string) => {
-      pollRef.current = setInterval(async () => {
-        try {
-          const res = await fetch(`/api/generate/status/${id}`);
-          if (!res.ok) throw new Error("Failed to check status");
-          const data = await res.json();
+  const pollStatus = useCallback((id: string) => {
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/generate/status/${id}`);
+        if (!res.ok) throw new Error("Failed to check status");
+        const data = await res.json();
 
-          if (data.status === "COMPLETED") {
-            clearInterval(pollRef.current!);
-            pollRef.current = null;
-            setGeneratedImageUrl(data.imageUrl);
-            setStatus("completed");
-          } else if (data.status === "FAILED") {
-            clearInterval(pollRef.current!);
-            pollRef.current = null;
-            setStatus("failed");
-            toast.error(data.error || "Generation failed. Please try again.");
+        if (data.status === "COMPLETED") {
+          clearInterval(pollRef.current!);
+          pollRef.current = null;
+
+          // Support both single imageUrl and images array
+          if (data.images && data.images.length > 0) {
+            setGeneratedImages(
+              data.images.map((img: any, idx: number) => ({
+                url: img.url || img,
+                index: idx,
+              }))
+            );
+          } else if (data.imageUrl) {
+            setGeneratedImages([{ url: data.imageUrl, index: 0 }]);
           }
-        } catch {
+          setStatus("completed");
+        } else if (data.status === "FAILED") {
           clearInterval(pollRef.current!);
           pollRef.current = null;
           setStatus("failed");
-          toast.error("Something went wrong. Please try again.");
+          toast.error(data.error || "Generation failed. Please try again.");
         }
-      }, 2000);
-    },
-    []
-  );
+      } catch {
+        clearInterval(pollRef.current!);
+        pollRef.current = null;
+        setStatus("failed");
+        toast.error("Something went wrong. Please try again.");
+      }
+    }, 2000);
+  }, []);
+
+  const handleModeChange = (newMode: GenerationMode) => {
+    if (newMode !== "generate" && !canAdvancedMode) {
+      setShowUpgradeModal(true);
+      return;
+    }
+    setMode(newMode);
+    // Reset source image when switching modes
+    if (newMode === "generate") {
+      setSourceImage(null);
+      setSourceImageUrl("");
+    }
+  };
+
+  const handleFileSelect = (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please upload an image file.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Image must be under 10MB.");
+      return;
+    }
+    setSourceImage(file);
+  };
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileSelect(file);
+  };
+
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+  };
+
+  const uploadSourceImage = async (): Promise<string | null> => {
+    if (!sourceImage) return null;
+    const formData = new FormData();
+    formData.append("file", sourceImage);
+
+    try {
+      const res = await fetch("/api/upload/source-image", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      const data = await res.json();
+      return data.url;
+    } catch {
+      toast.error("Failed to upload image.");
+      return null;
+    }
+  };
 
   const handleGenerate = async () => {
     if (!user) {
@@ -108,22 +198,49 @@ export default function CategoryGeneratePage() {
       return;
     }
 
+    // Validate source image for swap modes
+    if ((mode === "face_swap" || mode === "background_swap") && !sourceImage) {
+      toast.error("Please upload a photo first.");
+      return;
+    }
+
     setStatus("generating");
-    setGeneratedImageUrl(null);
+    setGeneratedImages([]);
 
     try {
+      // Upload source image first if needed
+      let uploadedUrl = sourceImageUrl;
+      if ((mode === "face_swap" || mode === "background_swap") && sourceImage) {
+        const url = await uploadSourceImage();
+        if (!url) {
+          setStatus("failed");
+          return;
+        }
+        uploadedUrl = url;
+        setSourceImageUrl(url);
+      }
+
+      const body: Record<string, any> = {
+        category: categoryKey,
+        subcategory: selectedSubcategory,
+        shot: selectedShot || undefined,
+        brand: selectedBrand || undefined,
+        model: selectedModel || undefined,
+        color: color || undefined,
+        variationCount,
+        mode,
+      };
+
+      if (mode === "face_swap") {
+        body.faceInputUrl = uploadedUrl;
+      } else if (mode === "background_swap") {
+        body.sourceImageUrl = uploadedUrl;
+      }
+
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          category: categoryKey,
-          subcategory: selectedSubcategory,
-          shot: selectedShot || undefined,
-          brand: selectedBrand || undefined,
-          model: selectedModel || undefined,
-          color: color || undefined,
-          faceSwap,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
@@ -140,35 +257,32 @@ export default function CategoryGeneratePage() {
     }
   };
 
-  const handleFaceSwapToggle = () => {
-    if (!canFaceSwap) {
-      setShowUpgradeModal(true);
-      return;
-    }
-    setFaceSwap((prev) => !prev);
-  };
-
-  const handleDownload = async () => {
-    if (!generatedImageUrl) return;
+  const handleDownloadSingle = async (url: string, index: number) => {
     try {
-      const response = await fetch(generatedImageUrl);
+      const response = await fetch(url);
       const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
+      const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
-      a.download = `letmeflex-${categoryKey}-${Date.now()}.png`;
+      a.href = blobUrl;
+      a.download = `letmeflex-${categoryKey}-${index + 1}-${Date.now()}.png`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(blobUrl);
     } catch {
       toast.error("Failed to download image.");
     }
   };
 
+  const handleDownloadAll = async () => {
+    for (let i = 0; i < generatedImages.length; i++) {
+      await handleDownloadSingle(generatedImages[i].url, i);
+    }
+  };
+
   const handleReset = () => {
     setStatus("idle");
-    setGeneratedImageUrl(null);
+    setGeneratedImages([]);
     setGenerationId(null);
   };
 
@@ -186,6 +300,114 @@ export default function CategoryGeneratePage() {
       </div>
     );
   }
+
+  const renderImageGrid = () => {
+    const count = generatedImages.length;
+
+    if (count === 1) {
+      return (
+        <div className="relative aspect-square rounded-2xl overflow-hidden bg-surface border border-gold/20 group">
+          <Image
+            src={generatedImages[0].url}
+            alt={`${category.label} generation`}
+            fill
+            className="object-cover"
+            unoptimized
+          />
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-end justify-center pb-4 opacity-0 group-hover:opacity-100">
+            <button
+              onClick={() => handleDownloadSingle(generatedImages[0].url, 0)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gold text-black text-sm font-heading font-bold hover:bg-gold-dark transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Download
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (count === 3) {
+      return (
+        <div className="space-y-3">
+          {/* First image full width */}
+          <div className="relative aspect-square rounded-2xl overflow-hidden bg-surface border border-gold/20 group">
+            <Image
+              src={generatedImages[0].url}
+              alt={`${category.label} generation 1`}
+              fill
+              className="object-cover"
+              unoptimized
+            />
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-end justify-center pb-4 opacity-0 group-hover:opacity-100">
+              <button
+                onClick={() => handleDownloadSingle(generatedImages[0].url, 0)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gold text-black text-sm font-heading font-bold hover:bg-gold-dark transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                Download
+              </button>
+            </div>
+          </div>
+          {/* Two below */}
+          <div className="grid grid-cols-2 gap-3">
+            {generatedImages.slice(1).map((img) => (
+              <div
+                key={img.index}
+                className="relative aspect-square rounded-2xl overflow-hidden bg-surface border border-gold/20 group"
+              >
+                <Image
+                  src={img.url}
+                  alt={`${category.label} generation ${img.index + 1}`}
+                  fill
+                  className="object-cover"
+                  unoptimized
+                />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-end justify-center pb-4 opacity-0 group-hover:opacity-100">
+                  <button
+                    onClick={() => handleDownloadSingle(img.url, img.index)}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gold text-black text-xs font-heading font-bold hover:bg-gold-dark transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Download
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // 2 or 4 variations: grid-cols-2
+    return (
+      <div className="grid grid-cols-2 gap-3">
+        {generatedImages.map((img) => (
+          <div
+            key={img.index}
+            className="relative aspect-square rounded-2xl overflow-hidden bg-surface border border-gold/20 group"
+          >
+            <Image
+              src={img.url}
+              alt={`${category.label} generation ${img.index + 1}`}
+              fill
+              className="object-cover"
+              unoptimized
+            />
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-end justify-center pb-4 opacity-0 group-hover:opacity-100">
+              <button
+                onClick={() => handleDownloadSingle(img.url, img.index)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gold text-black text-xs font-heading font-bold hover:bg-gold-dark transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Download
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -221,7 +443,7 @@ export default function CategoryGeneratePage() {
             <div className="absolute inset-0 bg-gradient-to-br from-gold/5 to-transparent" />
             <Loader2 className="w-10 h-10 text-gold animate-spin relative z-10" />
             <p className="text-sm text-text-muted font-medium relative z-10">
-              Generating your flex...
+              Generating {variationCount > 1 ? `${variationCount} variations` : "your flex"}...
             </p>
             <div className="w-48 h-1 bg-surface-2 rounded-full overflow-hidden relative z-10">
               <div className="h-full bg-gold/60 rounded-full animate-pulse" />
@@ -229,7 +451,7 @@ export default function CategoryGeneratePage() {
           </motion.div>
         )}
 
-        {status === "completed" && generatedImageUrl && (
+        {status === "completed" && generatedImages.length > 0 && (
           <motion.div
             key="completed"
             initial={{ opacity: 0, scale: 0.95 }}
@@ -237,23 +459,26 @@ export default function CategoryGeneratePage() {
             exit={{ opacity: 0, scale: 0.95 }}
             className="space-y-4"
           >
-            <div className="relative aspect-square rounded-2xl overflow-hidden bg-surface border border-gold/20">
-              <Image
-                src={generatedImageUrl}
-                alt={`${category.label} generation`}
-                fill
-                className="object-cover"
-                unoptimized
-              />
-            </div>
+            {renderImageGrid()}
             <div className="flex gap-3">
-              <button
-                onClick={handleDownload}
-                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-gold text-black font-heading font-bold text-sm hover:bg-gold-dark transition-colors"
-              >
-                <Download className="w-4 h-4" />
-                Download
-              </button>
+              {generatedImages.length > 1 && (
+                <button
+                  onClick={handleDownloadAll}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-gold text-black font-heading font-bold text-sm hover:bg-gold-dark transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  Download All
+                </button>
+              )}
+              {generatedImages.length === 1 && (
+                <button
+                  onClick={() => handleDownloadSingle(generatedImages[0].url, 0)}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-gold text-black font-heading font-bold text-sm hover:bg-gold-dark transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  Download
+                </button>
+              )}
               <button
                 onClick={handleReset}
                 className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-surface border border-border hover:border-gold/30 font-heading font-bold text-sm transition-colors"
@@ -293,7 +518,37 @@ export default function CategoryGeneratePage() {
       {/* Configuration Panel (shown when idle) */}
       {status === "idle" && (
         <div className="space-y-6">
-          {/* Subcategory Pills */}
+          {/* 1. Mode Toggle */}
+          <div>
+            <label className="block text-xs font-medium uppercase tracking-wider text-text-muted mb-3">
+              Mode
+            </label>
+            <div className="inline-flex p-1 bg-surface-2 border border-border rounded-full">
+              {MODE_OPTIONS.map((opt) => {
+                const isLocked =
+                  opt.value !== "generate" && !canAdvancedMode;
+                return (
+                  <button
+                    key={opt.value}
+                    onClick={() => handleModeChange(opt.value)}
+                    className={cn(
+                      "relative px-5 py-2 rounded-full text-sm font-medium transition-all",
+                      mode === opt.value
+                        ? "bg-gold text-black"
+                        : "text-text-muted hover:text-text-primary"
+                    )}
+                  >
+                    {opt.label}
+                    {isLocked && (
+                      <Lock className="absolute -top-1 -right-1 w-3 h-3 text-text-subtle" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 2. Subcategory Pills */}
           <div>
             <label className="block text-xs font-medium uppercase tracking-wider text-text-muted mb-3">
               Style
@@ -320,80 +575,144 @@ export default function CategoryGeneratePage() {
             </div>
           </div>
 
-          {/* Shot Type (if category has shots) */}
-          {category.shots && category.shots.length > 0 && (
-            <div>
-              <label className="block text-xs font-medium uppercase tracking-wider text-text-muted mb-3">
-                Shot Type
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {category.shots.map((shot) => (
-                  <button
-                    key={shot.id}
-                    onClick={() => setSelectedShot(shot.id)}
-                    className={cn(
-                      "px-4 py-2 rounded-full text-sm font-medium transition-all",
-                      selectedShot === shot.id
-                        ? "bg-gold text-black"
-                        : "bg-surface-2 border border-border text-text-muted hover:text-text-primary hover:border-gold/20"
-                    )}
+          {/* 3. Shot Type (hide in bg_replace mode) */}
+          {mode !== "background_swap" &&
+            category.shots &&
+            category.shots.length > 0 && (
+              <div>
+                <label className="block text-xs font-medium uppercase tracking-wider text-text-muted mb-3">
+                  Shot Type
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {category.shots.map((shot) => (
+                    <button
+                      key={shot.id}
+                      onClick={() => setSelectedShot(shot.id)}
+                      className={cn(
+                        "px-4 py-2 rounded-full text-sm font-medium transition-all",
+                        selectedShot === shot.id
+                          ? "bg-gold text-black"
+                          : "bg-surface-2 border border-border text-text-muted hover:text-text-primary hover:border-gold/20"
+                      )}
+                    >
+                      {shot.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+          {/* 4. Brand Dropdown (hide in bg_replace mode) */}
+          {mode !== "background_swap" &&
+            activeSubcategory?.brands &&
+            activeSubcategory.brands.length > 0 && (
+              <div>
+                <label className="block text-xs font-medium uppercase tracking-wider text-text-muted mb-3">
+                  Brand / Variant
+                </label>
+                <div className="relative">
+                  <select
+                    value={selectedBrand}
+                    onChange={(e) => setSelectedBrand(e.target.value)}
+                    className="w-full appearance-none bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text-primary focus:outline-none focus:border-gold/40 transition-colors"
                   >
-                    {shot.label}
+                    <option value="">Any</option>
+                    {activeSubcategory.brands.map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-subtle pointer-events-none" />
+                </div>
+              </div>
+            )}
+
+          {/* Model Dropdown (hide in bg_replace mode) */}
+          {mode !== "background_swap" &&
+            activeSubcategory?.models &&
+            activeSubcategory.models.length > 0 && (
+              <div>
+                <label className="block text-xs font-medium uppercase tracking-wider text-text-muted mb-3">
+                  Model
+                </label>
+                <div className="relative">
+                  <select
+                    value={selectedModel}
+                    onChange={(e) => setSelectedModel(e.target.value)}
+                    className="w-full appearance-none bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text-primary focus:outline-none focus:border-gold/40 transition-colors"
+                  >
+                    <option value="">Any</option>
+                    {activeSubcategory.models.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-subtle pointer-events-none" />
+                </div>
+              </div>
+            )}
+
+          {/* 5. Upload Area (face_swap or background_swap only) */}
+          {(mode === "face_swap" || mode === "background_swap") && (
+            <div>
+              <label className="block text-xs font-medium uppercase tracking-wider text-text-muted mb-3">
+                {mode === "face_swap"
+                  ? "Upload your photo"
+                  : "Upload your item photo"}
+              </label>
+              {sourceImagePreview ? (
+                <div className="relative inline-block">
+                  <div className="w-32 h-32 rounded-xl overflow-hidden border border-gold/30">
+                    <Image
+                      src={sourceImagePreview}
+                      alt="Source"
+                      width={128}
+                      height={128}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSourceImage(null);
+                      setSourceImageUrl("");
+                    }}
+                    className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600 transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
                   </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Brand Dropdown */}
-          {activeSubcategory?.brands && activeSubcategory.brands.length > 0 && (
-            <div>
-              <label className="block text-xs font-medium uppercase tracking-wider text-text-muted mb-3">
-                Brand / Variant
-              </label>
-              <div className="relative">
-                <select
-                  value={selectedBrand}
-                  onChange={(e) => setSelectedBrand(e.target.value)}
-                  className="w-full appearance-none bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text-primary focus:outline-none focus:border-gold/40 transition-colors"
+                </div>
+              ) : (
+                <div
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-border rounded-xl p-8 text-center cursor-pointer hover:border-gold/30 transition-colors"
                 >
-                  <option value="">Any</option>
-                  {activeSubcategory.brands.map((b) => (
-                    <option key={b} value={b}>
-                      {b}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-subtle pointer-events-none" />
-              </div>
+                  <Upload className="w-8 h-8 text-text-subtle mx-auto mb-3" />
+                  <p className="text-sm text-text-muted">
+                    Drag & drop or click to upload
+                  </p>
+                  <p className="text-xs text-text-subtle mt-1">
+                    PNG, JPG up to 10MB
+                  </p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileSelect(file);
+                    }}
+                  />
+                </div>
+              )}
             </div>
           )}
 
-          {/* Model Dropdown */}
-          {activeSubcategory?.models && activeSubcategory.models.length > 0 && (
-            <div>
-              <label className="block text-xs font-medium uppercase tracking-wider text-text-muted mb-3">
-                Model
-              </label>
-              <div className="relative">
-                <select
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  className="w-full appearance-none bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text-primary focus:outline-none focus:border-gold/40 transition-colors"
-                >
-                  <option value="">Any</option>
-                  {activeSubcategory.models.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-subtle pointer-events-none" />
-              </div>
-            </div>
-          )}
-
-          {/* Color Input */}
+          {/* 6. Color Input */}
           <div>
             <label className="block text-xs font-medium uppercase tracking-wider text-text-muted mb-3">
               Color preference{" "}
@@ -408,36 +727,30 @@ export default function CategoryGeneratePage() {
             />
           </div>
 
-          {/* Face Swap Toggle */}
-          <div className="flex items-center justify-between p-4 rounded-xl bg-surface-2 border border-border">
-            <div className="flex items-center gap-3">
-              <ScanFace className="w-5 h-5 text-gold" />
-              <div>
-                <p className="text-sm font-medium">Face Swap</p>
-                <p className="text-xs text-text-muted">
-                  Place your face into the scene (+1 credit)
-                </p>
-              </div>
+          {/* 7. Variations Selector */}
+          <div>
+            <label className="block text-xs font-medium uppercase tracking-wider text-text-muted mb-3">
+              Variations
+            </label>
+            <div className="flex gap-2">
+              {[1, 2, 3, 4].map((num) => (
+                <button
+                  key={num}
+                  onClick={() => setVariationCount(num)}
+                  className={cn(
+                    "flex-1 py-2.5 rounded-xl text-sm font-heading font-bold transition-all",
+                    variationCount === num
+                      ? "bg-gold text-black"
+                      : "bg-surface-2 border border-border text-text-muted hover:text-text-primary hover:border-gold/20"
+                  )}
+                >
+                  {num}
+                </button>
+              ))}
             </div>
-            <button
-              onClick={handleFaceSwapToggle}
-              className={cn(
-                "relative w-12 h-7 rounded-full transition-colors",
-                faceSwap ? "bg-gold" : "bg-surface border border-border"
-              )}
-            >
-              {!canFaceSwap && (
-                <Lock className="absolute -top-1 -right-1 w-3.5 h-3.5 text-text-subtle" />
-              )}
-              <div
-                className={cn(
-                  "absolute top-1 w-5 h-5 rounded-full transition-all",
-                  faceSwap
-                    ? "left-6 bg-black"
-                    : "left-1 bg-text-subtle"
-                )}
-              />
-            </button>
+            <p className="text-xs text-text-subtle mt-2 text-center">
+              {variationCount} credit{variationCount > 1 ? "s" : ""}
+            </p>
           </div>
 
           {/* Credits Cost */}
@@ -448,19 +761,16 @@ export default function CategoryGeneratePage() {
               <span className="text-gold font-medium">
                 {creditsCost} credit{creditsCost > 1 ? "s" : ""}
               </span>
-              {faceSwap && (
-                <span className="text-text-subtle"> (includes face swap)</span>
-              )}
             </span>
           </div>
 
-          {/* Generate Button */}
+          {/* 8. Generate Button */}
           <button
             onClick={handleGenerate}
             className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-gold text-black font-heading font-bold text-base hover:bg-gold-dark hover:shadow-gold transition-all"
           >
             <Sparkles className="w-5 h-5" />
-            Generate
+            Generate ({creditsCost} credit{creditsCost > 1 ? "s" : ""})
           </button>
         </div>
       )}
@@ -487,11 +797,11 @@ export default function CategoryGeneratePage() {
                   <Lock className="w-6 h-6 text-gold" />
                 </div>
                 <h3 className="font-heading font-bold text-lg">
-                  Upgrade to Unlock Face Swap
+                  Upgrade to Unlock
                 </h3>
                 <p className="text-sm text-text-muted mt-2">
-                  Face swap is available on Starter plan and above. Upgrade now
-                  to place yourself in any scene.
+                  Face Swap and Background Replace are available on Starter plan
+                  and above. Upgrade now to access advanced generation modes.
                 </p>
               </div>
               <div className="flex gap-3">

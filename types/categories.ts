@@ -122,3 +122,5 @@ export const CATEGORIES: Record<string, Category> = {
     ],
   },
 };
+
+export type GenerationMode = 'generate' | 'face_swap' | 'background_swap';

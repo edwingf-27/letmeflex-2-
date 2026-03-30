@@ -1,3 +1,5 @@
+import { db } from "@/lib/db";
+
 const DEFAULT_NEGATIVE =
   "watermark, text, logo, blurry, low quality, cartoon, illustration, ugly, distorted, amateur, grain, overexposed";
 
@@ -30,6 +32,66 @@ export function buildPrompt(
     negativePrompt: DEFAULT_NEGATIVE,
   };
 }
+
+export function buildBackgroundPrompt(
+  category: string,
+  options: PromptOptions
+): { prompt: string; negativePrompt: string } {
+  const builder = backgroundPromptBuilders[category];
+  if (!builder) {
+    return {
+      prompt: `Ultra-photorealistic luxury background scene for ${category}. Dramatic lighting, cinematic composition. ${CAMERA_QUALITY}`,
+      negativePrompt: DEFAULT_NEGATIVE,
+    };
+  }
+  return {
+    prompt: builder(options),
+    negativePrompt: DEFAULT_NEGATIVE,
+  };
+}
+
+const backgroundPromptBuilders: Record<string, (opts: PromptOptions) => string> = {
+  watches: () =>
+    `Dark luxury marble surface with warm studio lighting, soft bokeh in the background, macro photography setup, premium felt display pad, elegant reflections. ${CAMERA_QUALITY}`,
+  cars: (opts) => {
+    const shotMap: Record<string, string> = {
+      exterior: `Luxury coastal road at golden hour, Mediterranean cliffs, dramatic warm lighting, cinematic winding road, palm trees, pristine tarmac. ${CAMERA_QUALITY}`,
+      interior_wheel: `Luxury garage interior with dramatic spot lighting, polished concrete floor, premium automotive setting. ${CAMERA_QUALITY}`,
+      interior_passenger: `Night city street through windshield, neon reflections, rain-slicked road, atmospheric urban scene. ${CAMERA_QUALITY}`,
+      detail: `Pristine showroom environment, gradient dark background, controlled studio lighting, automotive photography setup. ${CAMERA_QUALITY}`,
+    };
+    return shotMap[opts.shot || "exterior"] || shotMap.exterior;
+  },
+  yacht: () =>
+    `Crystal turquoise Mediterranean waters, dramatic coastal cliffs, perfect blue sky with wispy clouds, golden hour light reflecting on calm sea surface. ${CAMERA_QUALITY}`,
+  mansion: () =>
+    `Manicured luxury estate grounds, infinity pool reflecting sunset sky, mature palm trees, architectural landscape lighting, twilight ambiance. ${CAMERA_QUALITY}`,
+  penthouse: (opts) => {
+    const cityMap: Record<string, string> = {
+      dubai: `Dubai skyline at twilight with Burj Khalifa, warm ambient glow from city lights, dramatic purple and orange sky. ${CAMERA_QUALITY}`,
+      miami: `Miami Beach oceanfront at sunset, turquoise water, art deco buildings glowing in warm light, palm tree silhouettes. ${CAMERA_QUALITY}`,
+      nyc: `Manhattan skyline from high altitude at blue hour, city lights twinkling, Central Park visible, dramatic clouds. ${CAMERA_QUALITY}`,
+      la: `Los Angeles Hills panorama at golden hour, downtown skyline in distance, lush green hillsides, warm California light. ${CAMERA_QUALITY}`,
+    };
+    return cityMap[opts.subcategory] || `Dramatic city skyline at blue hour, panoramic urban vista, atmospheric lighting. ${CAMERA_QUALITY}`;
+  },
+  club: () =>
+    `Exclusive nightclub VIP area ambiance, moody purple and blue LED lighting, premium velvet seating, bokeh crowd in background, atmospheric haze. ${CAMERA_QUALITY}`,
+  shopping: () =>
+    `Pristine white marble surface with soft natural window light, luxury retail environment, minimalist clean background, premium tissue paper and ribbons. ${CAMERA_QUALITY}`,
+  activities: (opts) => {
+    const shotMap: Record<string, string> = {
+      golf: `Pristine luxury golf course fairway, rolling green hills, country club in background, perfect blue sky, morning dew. ${CAMERA_QUALITY}`,
+      tennis: `Premium clay tennis court, Mediterranean luxury club facility, warm afternoon sunlight, manicured surroundings. ${CAMERA_QUALITY}`,
+      paddle: `Modern glass-walled padel court, luxury sports club, bright daylight, clean contemporary architecture. ${CAMERA_QUALITY}`,
+      buggy: `Desert sand dunes at golden hour, dramatic long shadows, warm orange sky, vast open landscape. ${CAMERA_QUALITY}`,
+      restaurant: `Michelin-star restaurant interior, candlelit ambiance, premium table setting, starched linen, warm intimate lighting. ${CAMERA_QUALITY}`,
+      private_jet: `View through private jet oval window, clouds and blue sky, warm cabin light spilling onto cream leather, altitude atmosphere. ${CAMERA_QUALITY}`,
+      helicopter: `Dramatic aerial coastal panorama, turquoise water meeting white sand, late afternoon light, sweeping vista below. ${CAMERA_QUALITY}`,
+    };
+    return shotMap[opts.subcategory] || shotMap.golf;
+  },
+};
 
 const promptBuilders: Record<string, (opts: PromptOptions) => string> = {
   watches: (opts) => {
@@ -138,3 +200,68 @@ const promptBuilders: Record<string, (opts: PromptOptions) => string> = {
     return shotMap[opts.subcategory] || shotMap.golf;
   },
 };
+
+/**
+ * Resolve the best prompt for a category, preferring approved templates from the DB.
+ * Falls back to hardcoded buildPrompt if no template is found.
+ */
+export async function resolvePrompt(
+  category: string,
+  options: PromptOptions
+): Promise<{ prompt: string; negativePrompt: string; templateId?: string }> {
+  try {
+    let query = db
+      .from("PromptTemplate")
+      .select("*")
+      .eq("category", category)
+      .eq("status", "approved");
+
+    if (options.subcategory) {
+      query = query.eq("subcategory", options.subcategory);
+    }
+    if (options.shot) {
+      query = query.eq("shot", options.shot);
+    }
+
+    const { data: templates, error } = await query
+      .order("rating", { ascending: false, nullsFirst: false })
+      .order("usageCount", { ascending: false })
+      .limit(1);
+
+    if (!error && templates && templates.length > 0) {
+      const template = templates[0];
+      let prompt = template.promptText || "";
+
+      // Replace placeholders
+      if (options.brand) prompt = prompt.replace(/\{brand\}/g, options.brand);
+      if (options.model) prompt = prompt.replace(/\{model\}/g, options.model);
+      if (options.color) prompt = prompt.replace(/\{color\}/g, options.color);
+
+      // Clean up any remaining placeholders
+      prompt = prompt.replace(/\{brand\}/g, "");
+      prompt = prompt.replace(/\{model\}/g, "");
+      prompt = prompt.replace(/\{color\}/g, "");
+
+      // Increment usage count (fire and forget)
+      db.from("PromptTemplate")
+        .update({ usageCount: (template.usageCount || 0) + 1 })
+        .eq("id", template.id)
+        .then(() => {});
+
+      return {
+        prompt: prompt.trim(),
+        negativePrompt: template.negativePrompt || DEFAULT_NEGATIVE,
+        templateId: template.id,
+      };
+    }
+  } catch (err) {
+    console.error("[RESOLVE_PROMPT] Error fetching template, falling back:", err);
+  }
+
+  // Fallback to hardcoded builder
+  const result = buildPrompt(category, options);
+  return {
+    prompt: result.prompt,
+    negativePrompt: result.negativePrompt,
+  };
+}
