@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, Suspense } from "react";
-import { signIn } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState, Suspense, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { z } from "zod";
 
@@ -22,7 +21,6 @@ export default function LoginPage() {
 }
 
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
   const authError = searchParams.get("error");
@@ -31,11 +29,14 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [generalError, setGeneralError] = useState(
-    authError === "OAuthAccountNotLinked"
-      ? "This email is already linked to another sign-in method."
-      : ""
+    authError === "CredentialsSignin"
+      ? "Invalid email or password."
+      : authError === "OAuthAccountNotLinked"
+        ? "This email is already linked to another sign-in method."
+        : ""
   );
   const [loading, setLoading] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -54,29 +55,49 @@ function LoginForm() {
     }
 
     setLoading(true);
+
+    // First validate credentials via our API for a nice error message
     try {
-      // First validate credentials via our own API
       const validateRes = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
 
-      const validateData = await validateRes.json();
-
-      if (!validateRes.ok || validateData.error) {
-        setGeneralError(validateData.error || "Invalid email or password.");
+      if (!validateRes.ok) {
+        const data = await validateRes.json();
+        setGeneralError(data.error || "Invalid email or password.");
         setLoading(false);
         return;
       }
+    } catch {
+      setGeneralError("Something went wrong. Please try again.");
+      setLoading(false);
+      return;
+    }
 
-      // Credentials are valid — do a full redirect sign-in
-      // This does a server-side POST which properly sets cookies
-      signIn("credentials", {
-        email,
-        password,
-        callbackUrl,
-      });
+    // Credentials valid — get CSRF token and submit via hidden form POST
+    // This is the only reliable way to set the session cookie with NextAuth v5
+    try {
+      const csrfRes = await fetch("/api/auth/csrf");
+      const { csrfToken } = await csrfRes.json();
+
+      // Create and submit a real HTML form
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = "/api/auth/callback/credentials";
+
+      const fields = { email, password, csrfToken, callbackUrl };
+      for (const [key, value] of Object.entries(fields)) {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = key;
+        input.value = value;
+        form.appendChild(input);
+      }
+
+      document.body.appendChild(form);
+      form.submit();
     } catch {
       setGeneralError("Something went wrong. Please try again.");
       setLoading(false);
@@ -85,7 +106,29 @@ function LoginForm() {
 
   async function handleGoogleSignIn() {
     setLoading(true);
-    await signIn("google", { callbackUrl });
+    // Same approach — get CSRF and do form POST
+    try {
+      const csrfRes = await fetch("/api/auth/csrf");
+      const { csrfToken } = await csrfRes.json();
+
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = "/api/auth/signin/google";
+
+      const fields = { csrfToken, callbackUrl };
+      for (const [key, value] of Object.entries(fields)) {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = key;
+        input.value = value;
+        form.appendChild(input);
+      }
+
+      document.body.appendChild(form);
+      form.submit();
+    } catch {
+      setLoading(false);
+    }
   }
 
   return (
@@ -150,7 +193,7 @@ function LoginForm() {
           </div>
 
           {/* Email / Password Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label
                 htmlFor="email"
