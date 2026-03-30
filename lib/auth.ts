@@ -76,7 +76,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             token.referralCode = dbUser.referralCode;
           } else {
             // Set defaults if DB query fails
-            token.id = user.id;
+            token.id = user.id || "";
             token.role = "USER";
             token.credits = 0;
             token.plan = "FREE";
@@ -84,7 +84,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
         } catch (err: any) {
           console.error("[AUTH-JWT] error:", err.message);
-          token.id = user.id;
+          token.id = user.id || "";
           token.role = "USER";
           token.credits = 0;
           token.plan = "FREE";
