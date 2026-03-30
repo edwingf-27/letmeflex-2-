@@ -25,7 +25,7 @@ export default function CreditsPage() {
   const { data: session } = useSession();
   const user = session?.user;
   const credits = user?.credits ?? 0;
-  const currentPlan = (user?.plan ?? "FREE") as PlanKey;
+  const currentPlan = ((user?.plan && user.plan in PLANS ? user.plan : "FREE")) as PlanKey;
 
   const [purchasingPack, setPurchasingPack] = useState<string | null>(null);
   const [upgradingPlan, setUpgradingPlan] = useState<string | null>(null);
@@ -39,7 +39,8 @@ export default function CreditsPage() {
     queryFn: async () => {
       const res = await fetch("/api/credits/history");
       if (!res.ok) return [];
-      return res.json();
+      const data = await res.json();
+      return data.logs || data || [];
     },
   });
 
@@ -50,7 +51,7 @@ export default function CreditsPage() {
   }>({
     queryKey: ["referral-stats"],
     queryFn: async () => {
-      const res = await fetch("/api/referrals/stats");
+      const res = await fetch("/api/user/referral-stats");
       if (!res.ok) return { totalReferrals: 0, creditsEarned: 0 };
       return res.json();
     },
