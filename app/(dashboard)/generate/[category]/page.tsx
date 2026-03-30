@@ -250,7 +250,24 @@ export default function CategoryGeneratePage() {
 
       const data = await res.json();
       setGenerationId(data.id);
-      pollStatus(data.id);
+
+      // If the response already has completed images, show them immediately
+      if (data.status === "COMPLETED" && (data.images?.length > 0 || data.imageUrl)) {
+        if (data.images && data.images.length > 0) {
+          setGeneratedImages(
+            data.images.map((img: any, idx: number) => ({
+              url: img.url || img.imageUrl,
+              index: idx,
+            }))
+          );
+        } else if (data.imageUrl) {
+          setGeneratedImages([{ url: data.imageUrl, index: 0 }]);
+        }
+        setStatus("completed");
+        toast.success("Your flex is ready!");
+      } else {
+        pollStatus(data.id);
+      }
     } catch (err: any) {
       setStatus("failed");
       toast.error(err.message || "Failed to start generation.");
