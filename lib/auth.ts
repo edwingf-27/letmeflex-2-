@@ -1,4 +1,5 @@
 import NextAuth from "next-auth";
+import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { db, generateId } from "@/lib/db";
@@ -10,6 +11,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: "/login",
   },
   providers: [
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID || "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+    }),
     Credentials({
       name: "credentials",
       credentials: {
@@ -102,6 +107,42 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.referralCode = (token.referralCode as string) || "";
       }
       return session;
+    },
+    async signIn({ user, account }) {
+      // Handle Google OAuth — create user in DB if not exists
+      if (account?.provider === "google" && user.email) {
+        try {
+          const { data: existing } = await db
+            .from("User")
+            .select("id")
+            .eq("email", user.email)
+            .single();
+
+          if (!existing) {
+            const userId = generateId();
+            await db.from("User").insert({
+              id: userId,
+              email: user.email,
+              name: user.name || null,
+              image: user.image || null,
+              credits: 3,
+              referralCode: generateId(),
+              role: "USER",
+              plan: "FREE",
+              updatedAt: new Date().toISOString(),
+            });
+            await db.from("CreditLog").insert({
+              id: generateId(),
+              userId,
+              amount: 3,
+              reason: "signup_bonus",
+            });
+          }
+        } catch (err: any) {
+          console.error("[AUTH] Google signIn error:", err.message);
+        }
+      }
+      return true;
     },
   },
 });
