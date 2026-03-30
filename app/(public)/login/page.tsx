@@ -55,22 +55,28 @@ function LoginForm() {
 
     setLoading(true);
     try {
-      const res = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-        callbackUrl,
+      // First validate credentials via our own API
+      const validateRes = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
 
-      if (res?.error) {
-        setGeneralError("Invalid email or password.");
+      const validateData = await validateRes.json();
+
+      if (!validateRes.ok || validateData.error) {
+        setGeneralError(validateData.error || "Invalid email or password.");
         setLoading(false);
-      } else if (res?.url) {
-        // Use window.location for a full page navigation so cookies are applied
-        window.location.href = res.url;
-      } else {
-        window.location.href = callbackUrl;
+        return;
       }
+
+      // Credentials are valid — do a full redirect sign-in
+      // This does a server-side POST which properly sets cookies
+      signIn("credentials", {
+        email,
+        password,
+        callbackUrl,
+      });
     } catch {
       setGeneralError("Something went wrong. Please try again.");
       setLoading(false);
