@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Syne, Montserrat, Playfair_Display } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
 import { QueryProvider } from "@/components/ui/query-provider";
@@ -77,6 +78,23 @@ export default function RootLayout({
             />
           </QueryProvider>
         </SessionProvider>
+        <Script
+          id="crisp-chat"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.$crisp=[];
+              window.CRISP_WEBSITE_ID="7a40a438-201e-4793-9a6c-cd3cca7879cf";
+              (function(){
+                var d=document;
+                var s=d.createElement("script");
+                s.src="https://client.crisp.chat/l.js";
+                s.async=1;
+                d.getElementsByTagName("head")[0].appendChild(s);
+              })();
+            `,
+          }}
+        />
       </body>
     </html>
   );
