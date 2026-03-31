@@ -69,7 +69,7 @@ export async function POST(req: Request) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://letmeflex.ai";
     const data = parsed.data;
 
-    // Quick buy: charge saved card instantly (no checkout page)
+    // Quick buy: charge saved card instantly
     if (data.type === "quick_buy") {
       const pack = CREDIT_PACKS.find((p) => p.id === data.packId);
       if (!pack) {
@@ -77,26 +77,18 @@ export async function POST(req: Request) {
       }
 
       if (!user.stripeCustomerId) {
-        return NextResponse.json(
-          { error: "no_saved_card" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "no_saved_card" }, { status: 400 });
       }
 
-      // Get saved payment methods
       const paymentMethods = await stripe.paymentMethods.list({
         customer: user.stripeCustomerId,
         type: "card",
       });
 
       if (paymentMethods.data.length === 0) {
-        return NextResponse.json(
-          { error: "no_saved_card" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "no_saved_card" }, { status: 400 });
       }
 
-      // Charge the default/first card
       const paymentIntent = await stripe.paymentIntents.create({
         amount: Math.round(pack.price * 100),
         currency: "usd",
@@ -113,7 +105,6 @@ export async function POST(req: Request) {
       });
 
       if (paymentIntent.status === "succeeded") {
-        // Add credits immediately
         const { data: currentUser } = await db
           .from("User")
           .select("credits")
@@ -121,10 +112,7 @@ export async function POST(req: Request) {
           .single();
 
         const newCredits = (currentUser?.credits || 0) + pack.credits;
-        await db
-          .from("User")
-          .update({ credits: newCredits })
-          .eq("id", user.id);
+        await db.from("User").update({ credits: newCredits }).eq("id", user.id);
 
         await db.from("CreditLog").insert({
           id: generateId(),
@@ -151,13 +139,10 @@ export async function POST(req: Request) {
         });
       }
 
-      return NextResponse.json(
-        { error: "Payment failed" },
-        { status: 402 }
-      );
+      return NextResponse.json({ error: "Payment failed" }, { status: 402 });
     }
 
-    // Ensure we have a Stripe customer for embedded checkout
+    // Standard Stripe Checkout (redirect) — saves card for future use
     const customerId = await getOrCreateStripeCustomer(
       user.id,
       user.email,
@@ -167,21 +152,13 @@ export async function POST(req: Request) {
     if (data.type === "credit_pack") {
       const pack = CREDIT_PACKS.find((p) => p.id === data.packId);
       if (!pack || !pack.stripePriceId) {
-        return NextResponse.json(
-          { error: "Invalid credit pack" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "Invalid credit pack" }, { status: 400 });
       }
 
-      const checkoutSession = await (stripe.checkout.sessions.create as any)({
-        ui_mode: "embedded",
+      const checkoutSession = await stripe.checkout.sessions.create({
         mode: "payment",
         customer: customerId,
         line_items: [{ price: pack.stripePriceId, quantity: 1 }],
-        payment_method_collection: "always",
-        saved_payment_method_options: {
-          payment_method_save: "enabled",
-        },
         payment_intent_data: {
           setup_future_usage: "off_session",
           metadata: {
@@ -197,39 +174,26 @@ export async function POST(req: Request) {
           packId: pack.id,
           credits: String(pack.credits),
         },
-        return_url: `${appUrl}/credits?session_id={CHECKOUT_SESSION_ID}`,
+        success_url: `${appUrl}/credits?success=true`,
+        cancel_url: `${appUrl}/credits?canceled=true`,
       });
 
-      return NextResponse.json({
-        clientSecret: checkoutSession.client_secret,
-        sessionId: checkoutSession.id,
-      });
+      return NextResponse.json({ url: checkoutSession.url });
     }
 
     // Subscription
     const planKey = data.planKey as PlanKey;
     const plan = PLANS[planKey];
     if (!plan || !("stripePriceId" in plan) || !plan.stripePriceId) {
-      return NextResponse.json(
-        { error: "Invalid subscription plan" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
     }
 
-    const checkoutSession = await (stripe.checkout.sessions.create as any)({
-      ui_mode: "embedded",
+    const checkoutSession = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
       line_items: [{ price: plan.stripePriceId, quantity: 1 }],
-      payment_method_collection: "always",
-      saved_payment_method_options: {
-        payment_method_save: "enabled",
-      },
       subscription_data: {
-        metadata: {
-          userId: user.id,
-          planKey,
-        },
+        metadata: { userId: user.id, planKey },
       },
       metadata: {
         userId: user.id,
@@ -237,13 +201,11 @@ export async function POST(req: Request) {
         planKey,
         credits: String(plan.credits),
       },
-      return_url: `${appUrl}/credits?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${appUrl}/credits?success=true`,
+      cancel_url: `${appUrl}/credits?canceled=true`,
     });
 
-    return NextResponse.json({
-      clientSecret: checkoutSession.client_secret,
-      sessionId: checkoutSession.id,
-    });
+    return NextResponse.json({ url: checkoutSession.url });
   } catch (error: any) {
     console.error("[PURCHASE_ERROR]", error?.message);
     return NextResponse.json(

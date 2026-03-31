@@ -19,17 +19,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
-import { loadStripe } from "@stripe/stripe-js";
-import {
-  EmbeddedCheckoutProvider,
-  EmbeddedCheckout,
-} from "@stripe/react-stripe-js";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
-
-const stripePromise = loadStripe(
-  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ""
-);
 
 const planKeys = Object.keys(PLANS) as PlanKey[];
 
@@ -57,8 +48,6 @@ function CreditsContent() {
   const credits = user?.credits ?? 0;
   const currentPlan = (user?.plan && user.plan in PLANS ? user.plan : "FREE") as PlanKey;
 
-  const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
-  const [checkoutLabel, setCheckoutLabel] = useState("");
   const [purchasingPack, setPurchasingPack] = useState<string | null>(null);
   const [quickBuying, setQuickBuying] = useState<string | null>(null);
   const [upgradingPlan, setUpgradingPlan] = useState<string | null>(null);
@@ -152,7 +141,7 @@ function CreditsContent() {
     }
   };
 
-  // Embedded checkout for credit packs
+  // Redirect to Stripe Checkout for credit packs
   const handleBuyPack = async (packId: string) => {
     setPurchasingPack(packId);
     try {
@@ -165,11 +154,7 @@ function CreditsContent() {
 
       if (!res.ok) throw new Error(data.error || "Failed to create checkout");
 
-      if (data.clientSecret) {
-        const pack = CREDIT_PACKS.find((p) => p.id === packId);
-        setCheckoutLabel(`${pack?.credits} credits — $${pack?.price}`);
-        setCheckoutClientSecret(data.clientSecret);
-      } else if (data.url) {
+      if (data.url) {
         window.location.href = data.url;
       }
     } catch (err: any) {
@@ -178,7 +163,7 @@ function CreditsContent() {
     }
   };
 
-  // Embedded checkout for subscriptions
+  // Redirect to Stripe Checkout for subscriptions
   const handleUpgradePlan = async (planKey: string) => {
     setUpgradingPlan(planKey);
     try {
@@ -191,11 +176,7 @@ function CreditsContent() {
 
       if (!res.ok) throw new Error(data.error || "Failed to create checkout");
 
-      if (data.clientSecret) {
-        const plan = PLANS[planKey as PlanKey];
-        setCheckoutLabel(`${plan.name} Plan — $${plan.price}/mo`);
-        setCheckoutClientSecret(data.clientSecret);
-      } else if (data.url) {
+      if (data.url) {
         window.location.href = data.url;
       }
     } catch (err: any) {
@@ -204,12 +185,6 @@ function CreditsContent() {
     }
   };
 
-  const closeCheckout = () => {
-    setCheckoutClientSecret(null);
-    setCheckoutLabel("");
-    setPurchasingPack(null);
-    setUpgradingPlan(null);
-  };
 
   const referralLink = `${process.env.NEXT_PUBLIC_APP_URL || "https://letmeflex.ai"}/r/${user?.referralCode || ""}`;
 
@@ -229,46 +204,6 @@ function CreditsContent() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-10">
-      {/* Embedded Checkout Modal */}
-      <AnimatePresence>
-        {checkoutClientSecret && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-surface border border-border rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
-            >
-              <div className="flex items-center justify-between p-5 border-b border-border">
-                <div>
-                  <h3 className="font-heading font-bold text-lg">Checkout</h3>
-                  <p className="text-sm text-text-muted">{checkoutLabel}</p>
-                </div>
-                <button
-                  onClick={closeCheckout}
-                  className="p-2 rounded-lg hover:bg-surface-2 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <div className="p-1">
-                <EmbeddedCheckoutProvider
-                  stripe={stripePromise}
-                  options={{ clientSecret: checkoutClientSecret }}
-                >
-                  <EmbeddedCheckout />
-                </EmbeddedCheckoutProvider>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Credit Balance */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
