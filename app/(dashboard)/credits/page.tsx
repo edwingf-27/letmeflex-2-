@@ -21,7 +21,48 @@ import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { loadStripe } from "@stripe/stripe-js";
+import {
+  Elements,
+  PaymentElement,
+  useStripe,
+  useElements,
+} from "@stripe/react-stripe-js";
 
+// -------------------------------------------------------
+// Stripe setup
+// -------------------------------------------------------
+const stripePromise = loadStripe(
+  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
+);
+
+const stripeAppearance = {
+  theme: "night" as const,
+  variables: {
+    colorPrimary: "#F9CA1F",
+    colorBackground: "#1C1C1F",
+    colorText: "#FFFFFF",
+    colorDanger: "#ef4444",
+    fontFamily: "Montserrat, sans-serif",
+    borderRadius: "10px",
+    colorTextPlaceholder: "#4A4A55",
+  },
+  rules: {
+    ".Input": {
+      border: "1px solid #2A2A2E",
+      backgroundColor: "#1C1C1F",
+    },
+    ".Input:focus": {
+      border: "1px solid #F9CA1F",
+      boxShadow: "0 0 0 3px rgba(249,202,31,0.12)",
+    },
+    ".Label": { color: "#8A8A95" },
+  },
+};
+
+// -------------------------------------------------------
+// Types
+// -------------------------------------------------------
 const planKeys = Object.keys(PLANS) as PlanKey[];
 
 interface SavedCard {
@@ -32,6 +73,208 @@ interface SavedCard {
   expYear: number;
 }
 
+interface PaymentModalData {
+  clientSecret: string;
+  amount: number; // cents
+  credits: number;
+  type: "credit_pack" | "subscription";
+  packId?: string;
+  planKey?: string;
+  subscriptionId?: string;
+  label: string; // e.g. "100 Credits" or "Pro Plan"
+}
+
+// -------------------------------------------------------
+// CheckoutForm — rendered inside <Elements>
+// -------------------------------------------------------
+function CheckoutForm({
+  modalData,
+  onSuccess,
+  onClose,
+}: {
+  modalData: PaymentModalData;
+  onSuccess: (data: { credits: number; message: string }) => void;
+  onClose: () => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [processing, setProcessing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+
+    setProcessing(true);
+    setErrorMessage(null);
+
+    try {
+      const { error, paymentIntent } = await stripe.confirmPayment({
+        elements,
+        confirmParams: {
+          return_url: `${window.location.origin}/credits`,
+        },
+        redirect: "if_required",
+      });
+
+      if (error) {
+        setErrorMessage(error.message || "Payment failed. Please try again.");
+        setProcessing(false);
+        return;
+      }
+
+      if (paymentIntent && paymentIntent.status === "succeeded") {
+        // Confirm on our backend to add credits
+        const res = await fetch("/api/credits/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            paymentIntentId: paymentIntent.id,
+            type: modalData.type,
+            packId: modalData.packId,
+            planKey: modalData.planKey,
+            subscriptionId: modalData.subscriptionId,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          setErrorMessage(data.error || "Failed to confirm payment.");
+          setProcessing(false);
+          return;
+        }
+
+        onSuccess({ credits: data.credits, message: data.message });
+      } else {
+        setErrorMessage("Payment was not completed. Please try again.");
+        setProcessing(false);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || "An unexpected error occurred.");
+      setProcessing(false);
+    }
+  };
+
+  const displayAmount = (modalData.amount / 100).toFixed(2);
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Header */}
+      <div className="text-center pb-4 border-b border-border">
+        <p className="text-sm text-text-muted mb-1">You are purchasing</p>
+        <p className="text-xl font-heading font-bold text-gold">
+          {modalData.label}
+        </p>
+      </div>
+
+      {/* Stripe PaymentElement */}
+      <PaymentElement
+        options={{
+          layout: "tabs",
+        }}
+      />
+
+      {/* Error */}
+      {errorMessage && (
+        <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">
+          {errorMessage}
+        </div>
+      )}
+
+      {/* Submit */}
+      <button
+        type="submit"
+        disabled={!stripe || !elements || processing}
+        className="w-full py-3.5 rounded-xl bg-gold text-black font-heading font-bold text-sm hover:bg-gold-dark transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+      >
+        {processing ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Processing...
+          </>
+        ) : (
+          `Pay $${displayAmount}`
+        )}
+      </button>
+
+      {/* Cancel link */}
+      <button
+        type="button"
+        onClick={onClose}
+        disabled={processing}
+        className="w-full text-center text-sm text-text-muted hover:text-text-primary transition-colors"
+      >
+        Cancel
+      </button>
+    </form>
+  );
+}
+
+// -------------------------------------------------------
+// PaymentModal — wraps CheckoutForm in Elements provider
+// -------------------------------------------------------
+function PaymentModal({
+  modalData,
+  onSuccess,
+  onClose,
+}: {
+  modalData: PaymentModalData;
+  onSuccess: (data: { credits: number; message: string }) => void;
+  onClose: () => void;
+}) {
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      >
+        {/* Backdrop */}
+        <div
+          className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+          onClick={onClose}
+        />
+
+        {/* Modal */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          transition={{ type: "spring", duration: 0.4 }}
+          className="relative w-full max-w-md rounded-2xl bg-surface border border-border p-6 shadow-2xl"
+        >
+          {/* Close button */}
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 p-1 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          <Elements
+            stripe={stripePromise}
+            options={{
+              clientSecret: modalData.clientSecret,
+              appearance: stripeAppearance,
+            }}
+          >
+            <CheckoutForm
+              modalData={modalData}
+              onSuccess={onSuccess}
+              onClose={onClose}
+            />
+          </Elements>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+// -------------------------------------------------------
+// Main Page
+// -------------------------------------------------------
 export default function CreditsPage() {
   return (
     <Suspense fallback={<div className="min-h-[60vh]" />}>
@@ -46,14 +289,21 @@ function CreditsContent() {
   const searchParams = useSearchParams();
   const user = session?.user;
   const credits = user?.credits ?? 0;
-  const currentPlan = (user?.plan && user.plan in PLANS ? user.plan : "FREE") as PlanKey;
+  const currentPlan = (user?.plan && user.plan in PLANS
+    ? user.plan
+    : "FREE") as PlanKey;
 
   const [purchasingPack, setPurchasingPack] = useState<string | null>(null);
   const [quickBuying, setQuickBuying] = useState<string | null>(null);
   const [upgradingPlan, setUpgradingPlan] = useState<string | null>(null);
   const [referralCopied, setReferralCopied] = useState(false);
 
-  // Check return from checkout
+  // Payment modal state
+  const [paymentModal, setPaymentModal] = useState<PaymentModalData | null>(
+    null
+  );
+
+  // Check return from Stripe redirect (edge case for 3DS)
   useEffect(() => {
     const sessionId = searchParams.get("session_id");
     if (sessionId) {
@@ -67,7 +317,36 @@ function CreditsContent() {
           }
         })
         .catch(() => {});
-      // Clean up URL
+      window.history.replaceState({}, "", "/credits");
+    }
+  }, [searchParams, updateSession, queryClient]);
+
+  // Also check for payment_intent in URL (redirect from 3DS)
+  useEffect(() => {
+    const piClientSecret = searchParams.get("payment_intent_client_secret");
+    const redirectStatus = searchParams.get("redirect_status");
+    if (piClientSecret && redirectStatus === "succeeded") {
+      const piId = searchParams.get("payment_intent");
+      if (piId) {
+        // Try to confirm the payment
+        fetch("/api/credits/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            paymentIntentId: piId,
+            type: "credit_pack",
+          }),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success) {
+              toast.success(data.message || "Payment successful!");
+              updateSession();
+              queryClient.invalidateQueries({ queryKey: ["credit-history"] });
+            }
+          })
+          .catch(() => {});
+      }
       window.history.replaceState({}, "", "/credits");
     }
   }, [searchParams, updateSession, queryClient]);
@@ -111,7 +390,9 @@ function CreditsContent() {
 
   const hasSavedCard = savedCards.length > 0;
 
-  // Quick buy with saved card
+  // -------------------------------------------------------
+  // Quick buy with saved card (unchanged)
+  // -------------------------------------------------------
   const handleQuickBuy = async (packId: string) => {
     setQuickBuying(packId);
     try {
@@ -123,7 +404,6 @@ function CreditsContent() {
       const data = await res.json();
 
       if (data.error === "no_saved_card") {
-        // Fallback to embedded checkout
         handleBuyPack(packId);
         return;
       }
@@ -141,7 +421,9 @@ function CreditsContent() {
     }
   };
 
-  // Redirect to Stripe Checkout for credit packs
+  // -------------------------------------------------------
+  // Buy credit pack — open in-app modal
+  // -------------------------------------------------------
   const handleBuyPack = async (packId: string) => {
     setPurchasingPack(packId);
     try {
@@ -152,18 +434,28 @@ function CreditsContent() {
       });
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data.error || "Failed to create checkout");
+      if (!res.ok) throw new Error(data.error || "Failed to start payment");
 
-      if (data.url) {
-        window.location.href = data.url;
-      }
+      const pack = CREDIT_PACKS.find((p) => p.id === packId);
+
+      setPaymentModal({
+        clientSecret: data.clientSecret,
+        amount: data.amount,
+        credits: data.credits,
+        type: "credit_pack",
+        packId,
+        label: `${data.credits} Credits`,
+      });
     } catch (err: any) {
       toast.error(err.message || "Failed to start purchase.");
+    } finally {
       setPurchasingPack(null);
     }
   };
 
-  // Redirect to Stripe Checkout for subscriptions
+  // -------------------------------------------------------
+  // Subscribe — open in-app modal
+  // -------------------------------------------------------
   const handleUpgradePlan = async (planKey: string) => {
     setUpgradingPlan(planKey);
     try {
@@ -174,19 +466,43 @@ function CreditsContent() {
       });
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data.error || "Failed to create checkout");
+      if (!res.ok) throw new Error(data.error || "Failed to start subscription");
 
-      if (data.url) {
-        window.location.href = data.url;
-      }
+      const plan = PLANS[planKey as PlanKey];
+
+      setPaymentModal({
+        clientSecret: data.clientSecret,
+        amount: Math.round(plan.price * 100),
+        credits: plan.credits,
+        type: "subscription",
+        planKey,
+        subscriptionId: data.subscriptionId,
+        label: `${plan.name} Plan - $${plan.price}/mo`,
+      });
     } catch (err: any) {
       toast.error(err.message || "Failed to start upgrade.");
+    } finally {
       setUpgradingPlan(null);
     }
   };
 
+  // -------------------------------------------------------
+  // Payment success handler
+  // -------------------------------------------------------
+  const handlePaymentSuccess = (data: {
+    credits: number;
+    message: string;
+  }) => {
+    setPaymentModal(null);
+    toast.success(data.message || "Payment successful!");
+    updateSession();
+    queryClient.invalidateQueries({ queryKey: ["credit-history"] });
+    queryClient.invalidateQueries({ queryKey: ["saved-cards"] });
+  };
 
-  const referralLink = `${process.env.NEXT_PUBLIC_APP_URL || "https://letmeflex.ai"}/r/${user?.referralCode || ""}`;
+  const referralLink = `${
+    process.env.NEXT_PUBLIC_APP_URL || "https://letmeflex.ai"
+  }/r/${user?.referralCode || ""}`;
 
   const copyReferralLink = () => {
     navigator.clipboard.writeText(referralLink);
@@ -195,15 +511,17 @@ function CreditsContent() {
     setTimeout(() => setReferralCopied(false), 2000);
   };
 
-  const brandIcons: Record<string, string> = {
-    visa: "💳",
-    mastercard: "💳",
-    amex: "💳",
-    discover: "💳",
-  };
-
   return (
     <div className="max-w-5xl mx-auto space-y-10">
+      {/* Payment Modal */}
+      {paymentModal && (
+        <PaymentModal
+          modalData={paymentModal}
+          onSuccess={handlePaymentSuccess}
+          onClose={() => setPaymentModal(null)}
+        />
+      )}
+
       {/* Credit Balance */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -236,7 +554,9 @@ function CreditsContent() {
           <CreditCard className="w-5 h-5 text-gold" />
           <div className="flex-1">
             <span className="text-sm font-medium">
-              {savedCards[0].brand.charAt(0).toUpperCase() + savedCards[0].brand.slice(1)} ending in {savedCards[0].last4}
+              {savedCards[0].brand.charAt(0).toUpperCase() +
+                savedCards[0].brand.slice(1)}{" "}
+              ending in {savedCards[0].last4}
             </span>
             <span className="text-xs text-text-muted ml-2">
               expires {savedCards[0].expMonth}/{savedCards[0].expYear}
@@ -457,7 +777,11 @@ function CreditsContent() {
                 onClick={copyReferralLink}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gold text-black font-heading font-bold text-sm hover:bg-gold-dark transition-colors shrink-0"
               >
-                {referralCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                {referralCopied ? (
+                  <Check className="w-4 h-4" />
+                ) : (
+                  <Copy className="w-4 h-4" />
+                )}
                 {referralCopied ? "Copied!" : "Copy"}
               </button>
             </div>
@@ -472,7 +796,9 @@ function CreditsContent() {
         </h2>
         {creditHistory.length === 0 ? (
           <div className="rounded-2xl bg-surface border border-border p-8 text-center">
-            <p className="text-text-muted text-sm">No credit transactions yet.</p>
+            <p className="text-text-muted text-sm">
+              No credit transactions yet.
+            </p>
           </div>
         ) : (
           <div className="rounded-2xl bg-surface border border-border overflow-hidden">
@@ -480,9 +806,15 @@ function CreditsContent() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-subtle">Date</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-subtle">Reason</th>
-                    <th className="text-right px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-subtle">Amount</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-subtle">
+                      Date
+                    </th>
+                    <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-subtle">
+                      Reason
+                    </th>
+                    <th className="text-right px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-subtle">
+                      Amount
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -500,7 +832,8 @@ function CreditsContent() {
                           entry.amount > 0 ? "text-green-400" : "text-red-400"
                         )}
                       >
-                        {entry.amount > 0 ? "+" : ""}{entry.amount}
+                        {entry.amount > 0 ? "+" : ""}
+                        {entry.amount}
                       </td>
                     </tr>
                   ))}

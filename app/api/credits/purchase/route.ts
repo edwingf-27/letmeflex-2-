@@ -66,10 +66,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://letmeflex.ai";
     const data = parsed.data;
 
-    // Quick buy: charge saved card instantly
+    // -------------------------------------------------------
+    // Quick buy: charge saved card instantly (unchanged flow)
+    // -------------------------------------------------------
     if (data.type === "quick_buy") {
       const pack = CREDIT_PACKS.find((p) => p.id === data.packId);
       if (!pack) {
@@ -142,70 +143,90 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Payment failed" }, { status: 402 });
     }
 
-    // Standard Stripe Checkout (redirect) — saves card for future use
+    // -------------------------------------------------------
+    // In-app payment flows (PaymentIntent / Subscription)
+    // -------------------------------------------------------
     const customerId = await getOrCreateStripeCustomer(
       user.id,
       user.email,
       user.stripeCustomerId
     );
 
+    // --- Credit Pack: create a PaymentIntent, return clientSecret ---
     if (data.type === "credit_pack") {
       const pack = CREDIT_PACKS.find((p) => p.id === data.packId);
-      if (!pack || !pack.stripePriceId) {
-        return NextResponse.json({ error: "Invalid credit pack" }, { status: 400 });
+      if (!pack) {
+        return NextResponse.json(
+          { error: "Invalid credit pack" },
+          { status: 400 }
+        );
       }
 
-      const checkoutSession = await stripe.checkout.sessions.create({
-        mode: "payment",
+      const amountInCents = Math.round(pack.price * 100);
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amountInCents,
+        currency: "usd",
         customer: customerId,
-        line_items: [{ price: pack.stripePriceId, quantity: 1 }],
-        payment_intent_data: {
-          setup_future_usage: "off_session",
-          metadata: {
-            userId: user.id,
-            type: "credit_pack",
-            packId: pack.id,
-            credits: String(pack.credits),
-          },
-        },
+        setup_future_usage: "off_session",
         metadata: {
           userId: user.id,
           type: "credit_pack",
           packId: pack.id,
           credits: String(pack.credits),
         },
-        success_url: `${appUrl}/credits?success=true`,
-        cancel_url: `${appUrl}/credits?canceled=true`,
       });
 
-      return NextResponse.json({ url: checkoutSession.url });
+      return NextResponse.json({
+        clientSecret: paymentIntent.client_secret,
+        amount: amountInCents,
+        credits: pack.credits,
+      });
     }
 
-    // Subscription
-    const planKey = data.planKey as PlanKey;
-    const plan = PLANS[planKey];
-    if (!plan || !("stripePriceId" in plan) || !plan.stripePriceId) {
-      return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
+    // --- Subscription: create incomplete subscription, return clientSecret ---
+    if (data.type === "subscription") {
+      const planKey = data.planKey as PlanKey;
+      const plan = PLANS[planKey];
+      if (!plan || !("stripePriceId" in plan) || !plan.stripePriceId) {
+        return NextResponse.json(
+          { error: "Invalid plan" },
+          { status: 400 }
+        );
+      }
+
+      const subscription = await stripe.subscriptions.create({
+        customer: customerId,
+        items: [{ price: plan.stripePriceId }],
+        payment_behavior: "default_incomplete",
+        payment_settings: {
+          save_default_payment_method: "on_subscription",
+        },
+        expand: ["latest_invoice.payment_intent"],
+        metadata: {
+          userId: user.id,
+          planKey,
+          credits: String(plan.credits),
+        },
+      });
+
+      const invoice = subscription.latest_invoice as any;
+      const paymentIntent = invoice?.payment_intent as any;
+
+      if (!paymentIntent?.client_secret) {
+        return NextResponse.json(
+          { error: "Failed to create subscription payment" },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        clientSecret: paymentIntent.client_secret,
+        subscriptionId: subscription.id,
+      });
     }
 
-    const checkoutSession = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      customer: customerId,
-      line_items: [{ price: plan.stripePriceId, quantity: 1 }],
-      subscription_data: {
-        metadata: { userId: user.id, planKey },
-      },
-      metadata: {
-        userId: user.id,
-        type: "subscription",
-        planKey,
-        credits: String(plan.credits),
-      },
-      success_url: `${appUrl}/credits?success=true`,
-      cancel_url: `${appUrl}/credits?canceled=true`,
-    });
-
-    return NextResponse.json({ url: checkoutSession.url });
+    return NextResponse.json({ error: "Invalid type" }, { status: 400 });
   } catch (error: any) {
     console.error("[PURCHASE_ERROR]", error?.message);
     return NextResponse.json(
