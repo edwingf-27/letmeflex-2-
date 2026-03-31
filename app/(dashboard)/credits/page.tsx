@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PLANS, CREDIT_PACKS, type PlanKey } from "@/lib/stripe";
 import { cn, formatDate } from "@/lib/utils";
 import {
@@ -10,26 +10,89 @@ import {
   Crown,
   Check,
   Copy,
-  ArrowRight,
   Loader2,
   Users,
   Zap,
+  CreditCard,
+  X,
   Sparkles,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
+import { loadStripe } from "@stripe/stripe-js";
+import {
+  EmbeddedCheckoutProvider,
+  EmbeddedCheckout,
+} from "@stripe/react-stripe-js";
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+
+const stripePromise = loadStripe(
+  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ""
+);
 
 const planKeys = Object.keys(PLANS) as PlanKey[];
 
+interface SavedCard {
+  id: string;
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+}
+
 export default function CreditsPage() {
-  const { data: session } = useSession();
+  return (
+    <Suspense fallback={<div className="min-h-[60vh]" />}>
+      <CreditsContent />
+    </Suspense>
+  );
+}
+
+function CreditsContent() {
+  const { data: session, update: updateSession } = useSession();
+  const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
   const user = session?.user;
   const credits = user?.credits ?? 0;
-  const currentPlan = ((user?.plan && user.plan in PLANS ? user.plan : "FREE")) as PlanKey;
+  const currentPlan = (user?.plan && user.plan in PLANS ? user.plan : "FREE") as PlanKey;
 
+  const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
+  const [checkoutLabel, setCheckoutLabel] = useState("");
   const [purchasingPack, setPurchasingPack] = useState<string | null>(null);
+  const [quickBuying, setQuickBuying] = useState<string | null>(null);
   const [upgradingPlan, setUpgradingPlan] = useState<string | null>(null);
   const [referralCopied, setReferralCopied] = useState(false);
+
+  // Check return from checkout
+  useEffect(() => {
+    const sessionId = searchParams.get("session_id");
+    if (sessionId) {
+      fetch(`/api/credits/session?session_id=${sessionId}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.paymentStatus === "paid") {
+            toast.success("Payment successful! Credits added.");
+            updateSession();
+            queryClient.invalidateQueries({ queryKey: ["credit-history"] });
+          }
+        })
+        .catch(() => {});
+      // Clean up URL
+      window.history.replaceState({}, "", "/credits");
+    }
+  }, [searchParams, updateSession, queryClient]);
+
+  // Saved cards
+  const { data: savedCards = [] } = useQuery<SavedCard[]>({
+    queryKey: ["saved-cards"],
+    queryFn: async () => {
+      const res = await fetch("/api/credits/saved-cards");
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.cards || [];
+    },
+  });
 
   // Credit history
   const { data: creditHistory = [] } = useQuery<
@@ -57,6 +120,39 @@ export default function CreditsPage() {
     },
   });
 
+  const hasSavedCard = savedCards.length > 0;
+
+  // Quick buy with saved card
+  const handleQuickBuy = async (packId: string) => {
+    setQuickBuying(packId);
+    try {
+      const res = await fetch("/api/credits/purchase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "quick_buy", packId }),
+      });
+      const data = await res.json();
+
+      if (data.error === "no_saved_card") {
+        // Fallback to embedded checkout
+        handleBuyPack(packId);
+        return;
+      }
+
+      if (!res.ok) throw new Error(data.error || "Payment failed");
+
+      toast.success(data.message || "Credits added!");
+      updateSession();
+      queryClient.invalidateQueries({ queryKey: ["credit-history"] });
+      queryClient.invalidateQueries({ queryKey: ["saved-cards"] });
+    } catch (err: any) {
+      toast.error(err.message || "Payment failed");
+    } finally {
+      setQuickBuying(null);
+    }
+  };
+
+  // Embedded checkout for credit packs
   const handleBuyPack = async (packId: string) => {
     setPurchasingPack(packId);
     try {
@@ -65,12 +161,15 @@ export default function CreditsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "credit_pack", packId }),
       });
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({}));
-        throw new Error(error.error || "Failed to create checkout");
-      }
       const data = await res.json();
-      if (data.url) {
+
+      if (!res.ok) throw new Error(data.error || "Failed to create checkout");
+
+      if (data.clientSecret) {
+        const pack = CREDIT_PACKS.find((p) => p.id === packId);
+        setCheckoutLabel(`${pack?.credits} credits — $${pack?.price}`);
+        setCheckoutClientSecret(data.clientSecret);
+      } else if (data.url) {
         window.location.href = data.url;
       }
     } catch (err: any) {
@@ -79,6 +178,7 @@ export default function CreditsPage() {
     }
   };
 
+  // Embedded checkout for subscriptions
   const handleUpgradePlan = async (planKey: string) => {
     setUpgradingPlan(planKey);
     try {
@@ -87,18 +187,28 @@ export default function CreditsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "subscription", planKey }),
       });
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({}));
-        throw new Error(error.error || "Failed to create checkout");
-      }
       const data = await res.json();
-      if (data.url) {
+
+      if (!res.ok) throw new Error(data.error || "Failed to create checkout");
+
+      if (data.clientSecret) {
+        const plan = PLANS[planKey as PlanKey];
+        setCheckoutLabel(`${plan.name} Plan — $${plan.price}/mo`);
+        setCheckoutClientSecret(data.clientSecret);
+      } else if (data.url) {
         window.location.href = data.url;
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to start upgrade.");
       setUpgradingPlan(null);
     }
+  };
+
+  const closeCheckout = () => {
+    setCheckoutClientSecret(null);
+    setCheckoutLabel("");
+    setPurchasingPack(null);
+    setUpgradingPlan(null);
   };
 
   const referralLink = `${process.env.NEXT_PUBLIC_APP_URL || "https://letmeflex.ai"}/r/${user?.referralCode || ""}`;
@@ -110,8 +220,55 @@ export default function CreditsPage() {
     setTimeout(() => setReferralCopied(false), 2000);
   };
 
+  const brandIcons: Record<string, string> = {
+    visa: "💳",
+    mastercard: "💳",
+    amex: "💳",
+    discover: "💳",
+  };
+
   return (
     <div className="max-w-5xl mx-auto space-y-10">
+      {/* Embedded Checkout Modal */}
+      <AnimatePresence>
+        {checkoutClientSecret && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-surface border border-border rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between p-5 border-b border-border">
+                <div>
+                  <h3 className="font-heading font-bold text-lg">Checkout</h3>
+                  <p className="text-sm text-text-muted">{checkoutLabel}</p>
+                </div>
+                <button
+                  onClick={closeCheckout}
+                  className="p-2 rounded-lg hover:bg-surface-2 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-1">
+                <EmbeddedCheckoutProvider
+                  stripe={stripePromise}
+                  options={{ clientSecret: checkoutClientSecret }}
+                >
+                  <EmbeddedCheckout />
+                </EmbeddedCheckoutProvider>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Credit Balance */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -136,8 +293,26 @@ export default function CreditsPage() {
           </div>
         </div>
         <div className="absolute -right-12 -top-12 w-56 h-56 bg-gold/10 rounded-full blur-3xl" />
-        <div className="absolute -left-8 -bottom-8 w-40 h-40 bg-gold/5 rounded-full blur-3xl" />
       </motion.div>
+
+      {/* Saved Card */}
+      {hasSavedCard && (
+        <div className="rounded-xl bg-surface border border-border p-4 flex items-center gap-3">
+          <CreditCard className="w-5 h-5 text-gold" />
+          <div className="flex-1">
+            <span className="text-sm font-medium">
+              {savedCards[0].brand.charAt(0).toUpperCase() + savedCards[0].brand.slice(1)} ending in {savedCards[0].last4}
+            </span>
+            <span className="text-xs text-text-muted ml-2">
+              expires {savedCards[0].expMonth}/{savedCards[0].expYear}
+            </span>
+          </div>
+          <span className="text-xs text-gold font-medium flex items-center gap-1">
+            <Sparkles className="w-3 h-3" />
+            One-click buy enabled
+          </span>
+        </div>
+      )}
 
       {/* Credit Packs */}
       <div>
@@ -146,6 +321,7 @@ export default function CreditsPage() {
         </h2>
         <p className="text-sm text-text-muted mb-6">
           One-time purchases. Credits never expire.
+          {hasSavedCard && " Click to buy instantly with saved card."}
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {CREDIT_PACKS.map((pack, index) => (
@@ -168,22 +344,49 @@ export default function CreditsPage() {
               <p className="text-2xl font-heading font-bold">
                 ${pack.price.toFixed(2)}
               </p>
-              <button
-                onClick={() => handleBuyPack(pack.id)}
-                disabled={purchasingPack === pack.id}
-                className={cn(
-                  "w-full py-3 rounded-xl font-heading font-bold text-sm transition-all",
-                  purchasingPack === pack.id
-                    ? "bg-gold/50 text-black/50 cursor-not-allowed"
-                    : "bg-surface-2 border border-border text-text-primary hover:border-gold/30 hover:text-gold"
-                )}
-              >
-                {purchasingPack === pack.id ? (
-                  <Loader2 className="w-4 h-4 animate-spin mx-auto" />
-                ) : (
-                  "Buy"
-                )}
-              </button>
+
+              {hasSavedCard ? (
+                <div className="w-full space-y-2">
+                  <button
+                    onClick={() => handleQuickBuy(pack.id)}
+                    disabled={quickBuying === pack.id}
+                    className="w-full py-3 rounded-xl bg-gold text-black font-heading font-bold text-sm hover:bg-gold-dark transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {quickBuying === pack.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4" />
+                        Buy Instantly
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => handleBuyPack(pack.id)}
+                    disabled={purchasingPack === pack.id}
+                    className="w-full py-2 rounded-xl text-xs text-text-muted hover:text-text-primary transition-colors"
+                  >
+                    Use different card
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => handleBuyPack(pack.id)}
+                  disabled={purchasingPack === pack.id}
+                  className={cn(
+                    "w-full py-3 rounded-xl font-heading font-bold text-sm transition-all",
+                    purchasingPack === pack.id
+                      ? "bg-gold/50 text-black/50 cursor-not-allowed"
+                      : "bg-surface-2 border border-border text-text-primary hover:border-gold/30 hover:text-gold"
+                  )}
+                >
+                  {purchasingPack === pack.id ? (
+                    <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+                  ) : (
+                    "Buy"
+                  )}
+                </button>
+              )}
             </motion.div>
           ))}
         </div>
@@ -297,8 +500,6 @@ export default function CreditsPage() {
             <p className="text-sm text-text-muted mt-1">
               Share your link and earn 5 credits for every friend who signs up.
             </p>
-
-            {/* Referral Stats */}
             <div className="flex gap-6 mt-4">
               <div>
                 <p className="text-2xl font-heading font-bold text-gold">
@@ -313,8 +514,6 @@ export default function CreditsPage() {
                 <p className="text-xs text-text-muted">Credits earned</p>
               </div>
             </div>
-
-            {/* Copy Link */}
             <div className="flex items-center gap-2 mt-4">
               <div className="flex-1 bg-surface-2 border border-border rounded-lg px-4 py-2.5 text-sm text-text-muted truncate font-mono">
                 {referralLink}
@@ -323,11 +522,7 @@ export default function CreditsPage() {
                 onClick={copyReferralLink}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gold text-black font-heading font-bold text-sm hover:bg-gold-dark transition-colors shrink-0"
               >
-                {referralCopied ? (
-                  <Check className="w-4 h-4" />
-                ) : (
-                  <Copy className="w-4 h-4" />
-                )}
+                {referralCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                 {referralCopied ? "Copied!" : "Copy"}
               </button>
             </div>
@@ -342,9 +537,7 @@ export default function CreditsPage() {
         </h2>
         {creditHistory.length === 0 ? (
           <div className="rounded-2xl bg-surface border border-border p-8 text-center">
-            <p className="text-text-muted text-sm">
-              No credit transactions yet.
-            </p>
+            <p className="text-text-muted text-sm">No credit transactions yet.</p>
           </div>
         ) : (
           <div className="rounded-2xl bg-surface border border-border overflow-hidden">
@@ -352,15 +545,9 @@ export default function CreditsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-subtle">
-                      Date
-                    </th>
-                    <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-subtle">
-                      Reason
-                    </th>
-                    <th className="text-right px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-subtle">
-                      Amount
-                    </th>
+                    <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-subtle">Date</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-subtle">Reason</th>
+                    <th className="text-right px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-subtle">Amount</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -369,8 +556,8 @@ export default function CreditsPage() {
                       <td className="px-4 py-3 text-text-muted whitespace-nowrap">
                         {formatDate(entry.createdAt)}
                       </td>
-                      <td className="px-4 py-3 text-text-primary">
-                        {entry.reason}
+                      <td className="px-4 py-3 text-text-primary capitalize">
+                        {entry.reason.replace(/_/g, " ")}
                       </td>
                       <td
                         className={cn(
@@ -378,8 +565,7 @@ export default function CreditsPage() {
                           entry.amount > 0 ? "text-green-400" : "text-red-400"
                         )}
                       >
-                        {entry.amount > 0 ? "+" : ""}
-                        {entry.amount}
+                        {entry.amount > 0 ? "+" : ""}{entry.amount}
                       </td>
                     </tr>
                   ))}

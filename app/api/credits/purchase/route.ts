@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { db, generateId } from "@/lib/db";
 import { stripe, PLANS, CREDIT_PACKS, type PlanKey } from "@/lib/stripe";
 
 const purchaseSchema = z.discriminatedUnion("type", [
@@ -13,7 +13,31 @@ const purchaseSchema = z.discriminatedUnion("type", [
     type: z.literal("subscription"),
     planKey: z.enum(["STARTER", "PRO", "UNLIMITED"]),
   }),
+  z.object({
+    type: z.literal("quick_buy"),
+    packId: z.string(),
+  }),
 ]);
+
+async function getOrCreateStripeCustomer(
+  userId: string,
+  email: string,
+  existingCustomerId?: string | null
+): Promise<string> {
+  if (existingCustomerId) return existingCustomerId;
+
+  const customer = await stripe.customers.create({
+    email,
+    metadata: { userId },
+  });
+
+  await db
+    .from("User")
+    .update({ stripeCustomerId: customer.id })
+    .eq("id", userId);
+
+  return customer.id;
+}
 
 export async function POST(req: Request) {
   try {
@@ -43,8 +67,103 @@ export async function POST(req: Request) {
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://letmeflex.ai";
-
     const data = parsed.data;
+
+    // Quick buy: charge saved card instantly (no checkout page)
+    if (data.type === "quick_buy") {
+      const pack = CREDIT_PACKS.find((p) => p.id === data.packId);
+      if (!pack) {
+        return NextResponse.json({ error: "Invalid pack" }, { status: 400 });
+      }
+
+      if (!user.stripeCustomerId) {
+        return NextResponse.json(
+          { error: "no_saved_card" },
+          { status: 400 }
+        );
+      }
+
+      // Get saved payment methods
+      const paymentMethods = await stripe.paymentMethods.list({
+        customer: user.stripeCustomerId,
+        type: "card",
+      });
+
+      if (paymentMethods.data.length === 0) {
+        return NextResponse.json(
+          { error: "no_saved_card" },
+          { status: 400 }
+        );
+      }
+
+      // Charge the default/first card
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(pack.price * 100),
+        currency: "usd",
+        customer: user.stripeCustomerId,
+        payment_method: paymentMethods.data[0].id,
+        off_session: true,
+        confirm: true,
+        metadata: {
+          userId: user.id,
+          type: "credit_pack",
+          packId: pack.id,
+          credits: String(pack.credits),
+        },
+      });
+
+      if (paymentIntent.status === "succeeded") {
+        // Add credits immediately
+        const { data: currentUser } = await db
+          .from("User")
+          .select("credits")
+          .eq("id", user.id)
+          .single();
+
+        const newCredits = (currentUser?.credits || 0) + pack.credits;
+        await db
+          .from("User")
+          .update({ credits: newCredits })
+          .eq("id", user.id);
+
+        await db.from("CreditLog").insert({
+          id: generateId(),
+          userId: user.id,
+          amount: pack.credits,
+          reason: "purchase",
+          referenceId: paymentIntent.id,
+        });
+
+        await db.from("Order").insert({
+          id: generateId(),
+          userId: user.id,
+          stripePaymentIntentId: paymentIntent.id,
+          amount: Math.round(pack.price * 100),
+          credits: pack.credits,
+          status: "COMPLETED",
+          type: "CREDIT_PACK",
+        });
+
+        return NextResponse.json({
+          success: true,
+          credits: newCredits,
+          message: `+${pack.credits} credits added!`,
+        });
+      }
+
+      return NextResponse.json(
+        { error: "Payment failed" },
+        { status: 402 }
+      );
+    }
+
+    // Ensure we have a Stripe customer for embedded checkout
+    const customerId = await getOrCreateStripeCustomer(
+      user.id,
+      user.email,
+      user.stripeCustomerId
+    );
+
     if (data.type === "credit_pack") {
       const pack = CREDIT_PACKS.find((p) => p.id === data.packId);
       if (!pack || !pack.stripePriceId) {
@@ -54,22 +173,37 @@ export async function POST(req: Request) {
         );
       }
 
-      const checkoutSession = await stripe.checkout.sessions.create({
+      const checkoutSession = await (stripe.checkout.sessions.create as any)({
+        ui_mode: "embedded",
         mode: "payment",
-        customer_email: user.stripeCustomerId ? undefined : user.email,
-        customer: user.stripeCustomerId || undefined,
+        customer: customerId,
         line_items: [{ price: pack.stripePriceId, quantity: 1 }],
+        payment_method_collection: "always",
+        saved_payment_method_options: {
+          payment_method_save: "enabled",
+        },
+        payment_intent_data: {
+          setup_future_usage: "off_session",
+          metadata: {
+            userId: user.id,
+            type: "credit_pack",
+            packId: pack.id,
+            credits: String(pack.credits),
+          },
+        },
         metadata: {
           userId: user.id,
           type: "credit_pack",
           packId: pack.id,
           credits: String(pack.credits),
         },
-        success_url: `${appUrl}/credits?success=true`,
-        cancel_url: `${appUrl}/credits?canceled=true`,
+        return_url: `${appUrl}/credits?session_id={CHECKOUT_SESSION_ID}`,
       });
 
-      return NextResponse.json({ url: checkoutSession.url });
+      return NextResponse.json({
+        clientSecret: checkoutSession.client_secret,
+        sessionId: checkoutSession.id,
+      });
     }
 
     // Subscription
@@ -82,16 +216,14 @@ export async function POST(req: Request) {
       );
     }
 
-    const checkoutSession = await stripe.checkout.sessions.create({
+    const checkoutSession = await (stripe.checkout.sessions.create as any)({
+      ui_mode: "embedded",
       mode: "subscription",
-      customer_email: user.stripeCustomerId ? undefined : user.email,
-      customer: user.stripeCustomerId || undefined,
+      customer: customerId,
       line_items: [{ price: plan.stripePriceId, quantity: 1 }],
-      metadata: {
-        userId: user.id,
-        type: "subscription",
-        planKey,
-        credits: String(plan.credits),
+      payment_method_collection: "always",
+      saved_payment_method_options: {
+        payment_method_save: "enabled",
       },
       subscription_data: {
         metadata: {
@@ -99,13 +231,21 @@ export async function POST(req: Request) {
           planKey,
         },
       },
-      success_url: `${appUrl}/dashboard?upgraded=true`,
-      cancel_url: `${appUrl}/credits?canceled=true`,
+      metadata: {
+        userId: user.id,
+        type: "subscription",
+        planKey,
+        credits: String(plan.credits),
+      },
+      return_url: `${appUrl}/credits?session_id={CHECKOUT_SESSION_ID}`,
     });
 
-    return NextResponse.json({ url: checkoutSession.url });
-  } catch (error) {
-    console.error("[PURCHASE_ERROR]", error);
+    return NextResponse.json({
+      clientSecret: checkoutSession.client_secret,
+      sessionId: checkoutSession.id,
+    });
+  } catch (error: any) {
+    console.error("[PURCHASE_ERROR]", error?.message);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
