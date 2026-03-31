@@ -12,6 +12,7 @@ const purchaseSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("subscription"),
     planKey: z.enum(["STARTER", "PRO", "UNLIMITED"]),
+    billing: z.enum(["monthly", "annual"]).default("annual"),
   }),
   z.object({
     type: z.literal("quick_buy"),
@@ -187,8 +188,14 @@ export async function POST(req: Request) {
     // --- Subscription: create incomplete subscription, return clientSecret ---
     if (data.type === "subscription") {
       const planKey = data.planKey as PlanKey;
+      const billing = data.billing || "annual";
       const plan = PLANS[planKey];
-      if (!plan || !("stripePriceId" in plan) || !plan.stripePriceId) {
+
+      const priceId = billing === "annual"
+        ? plan.stripeAnnualPriceId || plan.stripePriceId
+        : plan.stripePriceId;
+
+      if (!plan || !priceId) {
         return NextResponse.json(
           { error: "Invalid plan" },
           { status: 400 }
@@ -197,7 +204,7 @@ export async function POST(req: Request) {
 
       const subscription = await stripe.subscriptions.create({
         customer: customerId,
-        items: [{ price: plan.stripePriceId }],
+        items: [{ price: priceId }],
         payment_behavior: "default_incomplete",
         payment_settings: {
           save_default_payment_method: "on_subscription",

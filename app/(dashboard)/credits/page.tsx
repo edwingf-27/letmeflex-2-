@@ -297,6 +297,7 @@ function CreditsContent() {
   const [quickBuying, setQuickBuying] = useState<string | null>(null);
   const [upgradingPlan, setUpgradingPlan] = useState<string | null>(null);
   const [referralCopied, setReferralCopied] = useState(false);
+  const [isAnnual, setIsAnnual] = useState(true);
 
   // Payment modal state
   const [paymentModal, setPaymentModal] = useState<PaymentModalData | null>(
@@ -462,7 +463,7 @@ function CreditsContent() {
       const res = await fetch("/api/credits/purchase", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "subscription", planKey }),
+        body: JSON.stringify({ type: "subscription", planKey, billing: isAnnual ? "annual" : "monthly" }),
       });
       const data = await res.json();
 
@@ -649,12 +650,33 @@ function CreditsContent() {
 
       {/* Plans */}
       <div>
-        <h2 className="text-xl font-heading font-semibold mb-1">
-          Subscription Plans
-        </h2>
-        <p className="text-sm text-text-muted mb-6">
-          Get monthly credits and unlock premium features.
-        </p>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-xl font-heading font-semibold mb-1">
+              Subscription Plans
+            </h2>
+            <p className="text-sm text-text-muted">
+              Get monthly credits and unlock premium features.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className={cn("text-xs font-medium", !isAnnual ? "text-text-primary" : "text-text-subtle")}>Monthly</span>
+            <button
+              onClick={() => setIsAnnual(!isAnnual)}
+              className={cn("relative w-12 h-6 rounded-full transition-colors", isAnnual ? "bg-gold" : "bg-surface-2 border border-border")}
+            >
+              <motion.div
+                className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm"
+                animate={{ left: isAnnual ? 26 : 2 }}
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              />
+            </button>
+            <span className={cn("text-xs font-medium", isAnnual ? "text-text-primary" : "text-text-subtle")}>Annual</span>
+            {isAnnual && (
+              <span className="px-2 py-0.5 rounded-full bg-gold/15 text-gold text-xs font-bold border border-gold/20">-50%</span>
+            )}
+          </div>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {planKeys.map((key, index) => {
             const plan = PLANS[key];
@@ -692,12 +714,18 @@ function CreditsContent() {
                   </h3>
                   <div className="mt-2">
                     <span className="text-3xl font-heading font-bold">
-                      {plan.price === 0 ? "Free" : `$${plan.price}`}
+                      {plan.price === 0 ? "Free" : `$${(isAnnual ? plan.annualPrice : plan.price).toFixed(2)}`}
                     </span>
                     {plan.price > 0 && (
-                      <span className="text-sm text-text-muted">/month</span>
+                      <span className="text-sm text-text-muted">/mo</span>
                     )}
                   </div>
+                  {isAnnual && plan.price > 0 && (
+                    <p className="text-xs text-text-subtle mt-1">
+                      <span className="line-through">${plan.price}/mo</span>
+                      <span className="text-gold ml-1.5">Save 50%</span>
+                    </p>
+                  )}
                 </div>
 
                 <ul className="space-y-2 flex-1">

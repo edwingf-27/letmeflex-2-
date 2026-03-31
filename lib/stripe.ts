@@ -25,6 +25,9 @@ export const PLANS = {
     credits: 3,
     monthlyCredits: 0,
     price: 0,
+    annualPrice: 0,
+    stripePriceId: undefined as string | undefined,
+    stripeAnnualPriceId: undefined as string | undefined,
     features: [
       "3 free generations",
       "Standard quality",
@@ -36,7 +39,9 @@ export const PLANS = {
     credits: 30,
     monthlyCredits: 30,
     price: 9.99,
+    annualPrice: 4.99,
     stripePriceId: process.env.STRIPE_STARTER_PRICE_ID,
+    stripeAnnualPriceId: process.env.STRIPE_STARTER_ANNUAL_PRICE_ID,
     features: [
       "30 credits/month",
       "HD quality",
@@ -49,7 +54,9 @@ export const PLANS = {
     credits: 100,
     monthlyCredits: 100,
     price: 24.99,
+    annualPrice: 12.49,
     stripePriceId: process.env.STRIPE_PRO_PRICE_ID,
+    stripeAnnualPriceId: process.env.STRIPE_PRO_ANNUAL_PRICE_ID,
     features: [
       "100 credits/month",
       "HD quality",
@@ -64,7 +71,9 @@ export const PLANS = {
     credits: 999999,
     monthlyCredits: 999999,
     price: 59.99,
+    annualPrice: 29.99,
     stripePriceId: process.env.STRIPE_UNLIMITED_PRICE_ID,
+    stripeAnnualPriceId: process.env.STRIPE_UNLIMITED_ANNUAL_PRICE_ID,
     features: [
       "Unlimited generations",
       "4K quality",
@@ -73,7 +82,7 @@ export const PLANS = {
       "Priority support",
     ],
   },
-} as const;
+};
 
 export const CREDIT_PACKS = [
   {
