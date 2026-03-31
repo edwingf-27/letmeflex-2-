@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Loader2,
   MessageSquare,
+  FlaskConical,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -26,6 +27,7 @@ const navItems = [
   { href: "/admin/generations", label: "Generations", icon: ImageIcon },
   { href: "/admin/models", label: "Models", icon: Cpu },
   { href: "/admin/prompts", label: "Prompts", icon: MessageSquare },
+  { href: "/admin/ab-testing", label: "A/B Testing", icon: FlaskConical },
   { href: "/admin/revenue", label: "Revenue", icon: DollarSign },
   { href: "/admin/moderation", label: "Moderation", icon: ShieldAlert },
 ];

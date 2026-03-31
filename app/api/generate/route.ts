@@ -8,22 +8,30 @@ import { buildPrompt, buildBackgroundPrompt } from "@/lib/image-gen/prompts/buil
 import { uploadGeneratedImages } from "@/lib/supabase";
 import { sendLowCreditsEmail } from "@/lib/resend";
 import { CATEGORIES } from "@/types/categories";
+import { ALL_SCENES, DEFAULT_NEGATIVE_PROMPT } from "@/types/scenes";
 
 export const maxDuration = 60;
 
 const generateSchema = z.object({
-  category: z.string(),
+  // New scene-based flow
+  sceneId: z.string().optional(),
+  // Legacy category flow (backward compat)
+  category: z.string().optional(),
   subcategory: z.string().optional(),
+  // Common fields
+  variationCount: z.number().int().min(1).max(4).default(1),
+  facePhotos: z.array(z.string().url()).optional(),
+  extraInstructions: z.string().max(500).optional(),
+  // Legacy fields
   model: z.string().optional(),
   brand: z.string().optional(),
   color: z.string().optional(),
   city: z.string().optional(),
   shot: z.string().optional(),
-  isFaceSwap: z.boolean().default(false),
-  faceInputUrl: z.string().url().optional(),
-  variationCount: z.number().int().min(1).max(4).default(1),
   mode: z.enum(["generate", "face_swap", "background_swap"]).default("generate"),
   sourceImageUrl: z.string().url().optional(),
+  isFaceSwap: z.boolean().default(false),
+  faceInputUrl: z.string().url().optional(),
 });
 
 export async function POST(req: Request) {
@@ -43,6 +51,218 @@ export async function POST(req: Request) {
       );
     }
 
+    const data = parsed.data;
+
+    // ============================
+    // SCENE-BASED FLOW (new)
+    // ============================
+    if (data.sceneId) {
+      const scene = ALL_SCENES.find((s) => s.id === data.sceneId);
+      if (!scene) {
+        return NextResponse.json({ error: "Invalid scene ID" }, { status: 400 });
+      }
+
+      const { variationCount, facePhotos, extraInstructions } = data;
+
+      // Credit cost: 1 per variation (face photos don't cost extra)
+      const creditCost = variationCount;
+
+      // Get current user
+      const { data: user } = await db
+        .from("User")
+        .select("id, credits, plan, email")
+        .eq("id", session.user.id)
+        .single();
+
+      if (!user) {
+        return NextResponse.json({ error: "User not found" }, { status: 404 });
+      }
+
+      if (user.credits < creditCost) {
+        return NextResponse.json(
+          { error: "Insufficient credits", required: creditCost, available: user.credits },
+          { status: 402 }
+        );
+      }
+
+      // Build prompt from scene + extra instructions
+      let prompt = scene.prompt;
+      if (extraInstructions) {
+        prompt = `${prompt} ${extraInstructions}`;
+      }
+      const negativePrompt = DEFAULT_NEGATIVE_PROMPT;
+
+      const generationId = generateId();
+
+      // Create generation record
+      await db.from("Generation").insert({
+        id: generationId,
+        userId: user.id,
+        category: scene.category,
+        subcategory: scene.id,
+        prompt,
+        negativePrompt,
+        creditsUsed: creditCost,
+        isFaceSwap: !!(facePhotos && facePhotos.length > 0),
+        faceInputUrl: facePhotos?.[0] || null,
+        variationCount,
+        mode: facePhotos && facePhotos.length > 0 ? "face_swap" : "generate",
+        sourceImageUrl: null,
+        status: "PENDING",
+      });
+
+      // Deduct credits
+      const newCredits = user.credits - creditCost;
+      await db.from("User").update({ credits: newCredits }).eq("id", user.id);
+
+      await db.from("CreditLog").insert({
+        id: generateId(),
+        userId: user.id,
+        amount: -creditCost,
+        reason: facePhotos && facePhotos.length > 0 ? "generation_face_swap" : "generation",
+        referenceId: generationId,
+      });
+
+      // Low credits warning
+      if (newCredits <= 1 && newCredits >= 0) {
+        sendLowCreditsEmail(user.email, newCredits).catch(() => {});
+      }
+
+      // Mark as PROCESSING
+      await db
+        .from("Generation")
+        .update({ status: "PROCESSING" })
+        .eq("id", generationId);
+
+      try {
+        let imageUrls: string[] = [];
+        let modelUsed = "";
+        let modelProvider = "";
+        let durationMs = 0;
+        const seeds: (number | undefined)[] = [];
+
+        // Step 1: Generate base images
+        const baseResult = await generateImages({
+          prompt,
+          negativePrompt,
+          numImages: variationCount,
+        });
+
+        modelUsed = baseResult.modelUsed;
+        modelProvider = baseResult.provider;
+        durationMs = baseResult.durationMs;
+
+        // Step 2: If face photos provided, face swap each generated image
+        if (facePhotos && facePhotos.length > 0) {
+          const faceUrl = facePhotos[0]; // Use first face photo as primary
+          for (const baseImg of baseResult.images) {
+            const swapped = await faceSwapWithFal(baseImg.imageUrl, faceUrl);
+            imageUrls.push(swapped.imageUrl);
+            durationMs += swapped.durationMs;
+            seeds.push(baseImg.seed);
+          }
+          modelUsed = "fal-ai/face-swap";
+        } else {
+          // No face swap — use base images directly
+          for (const img of baseResult.images) {
+            imageUrls.push(img.imageUrl);
+            seeds.push(img.seed);
+          }
+        }
+
+        // Download and upload all images to Supabase storage
+        const imageBuffers: Buffer[] = [];
+        for (const url of imageUrls) {
+          const response = await fetch(url);
+          if (!response.ok) throw new Error(`Failed to download generated image from ${url}`);
+          imageBuffers.push(Buffer.from(await response.arrayBuffer()));
+        }
+
+        const publicUrls = await uploadGeneratedImages(
+          user.id,
+          generationId,
+          imageBuffers
+        );
+
+        // Insert GenerationImage rows
+        const imageRows = publicUrls.map((url, index) => ({
+          id: generateId(),
+          generationId,
+          imageUrl: url,
+          variationIndex: index,
+          seed: seeds[index] ?? null,
+        }));
+
+        await db.from("GenerationImage").insert(imageRows);
+
+        // Update Generation record
+        await db
+          .from("Generation")
+          .update({
+            status: "COMPLETED",
+            imageUrl: publicUrls[0] || null,
+            modelUsed,
+            modelProvider: modelProvider || "fal",
+            metadata: {
+              durationMs,
+              variationCount,
+              sceneId: data.sceneId,
+              mode: facePhotos && facePhotos.length > 0 ? "face_swap" : "generate",
+              originalUrls: imageUrls,
+              facePhotoCount: facePhotos?.length || 0,
+              extraInstructions: extraInstructions || null,
+            },
+          })
+          .eq("id", generationId);
+
+        return NextResponse.json({
+          id: generationId,
+          status: "COMPLETED",
+          images: publicUrls.map((url, index) => ({ url, index })),
+          imageUrl: publicUrls[0] || null,
+          creditsUsed: creditCost,
+          creditsRemaining: newCredits,
+        });
+      } catch (genError: any) {
+        console.error(
+          "[GENERATION_ERROR]",
+          genError?.message,
+          genError?.body || genError?.status || "",
+          JSON.stringify(genError).substring(0, 500)
+        );
+
+        // Refund credits
+        await db
+          .from("User")
+          .update({ credits: user.credits })
+          .eq("id", user.id);
+
+        await db.from("CreditLog").insert({
+          id: generateId(),
+          userId: user.id,
+          amount: creditCost,
+          reason: "generation_refund",
+          referenceId: generationId,
+        });
+
+        await db
+          .from("Generation")
+          .update({
+            status: "FAILED",
+            metadata: { error: genError?.message || "Unknown error" },
+          })
+          .eq("id", generationId);
+
+        return NextResponse.json(
+          { error: "Image generation failed. Credits have been refunded." },
+          { status: 500 }
+        );
+      }
+    }
+
+    // ============================
+    // LEGACY CATEGORY FLOW (backward compat)
+    // ============================
     const {
       category,
       subcategory,
@@ -56,7 +276,14 @@ export async function POST(req: Request) {
       variationCount,
       mode,
       sourceImageUrl,
-    } = parsed.data;
+    } = data;
+
+    if (!category) {
+      return NextResponse.json(
+        { error: "Either sceneId or category is required" },
+        { status: 400 }
+      );
+    }
 
     // Support legacy isFaceSwap flag
     const effectiveMode = isFaceSwap && mode === "generate" ? "face_swap" : mode;
@@ -179,7 +406,6 @@ export async function POST(req: Request) {
       const seeds: (number | undefined)[] = [];
 
       if (effectiveMode === "generate") {
-        // Standard generation — generate N images
         const result = await generateImages({
           prompt,
           negativePrompt,
@@ -195,7 +421,6 @@ export async function POST(req: Request) {
           seeds.push(img.seed);
         }
       } else if (effectiveMode === "face_swap") {
-        // Generate base images, then face swap each
         const baseResult = await generateImages({
           prompt,
           negativePrompt,
@@ -218,7 +443,6 @@ export async function POST(req: Request) {
 
         modelUsed = "fal-ai/face-swap";
       } else if (effectiveMode === "background_swap") {
-        // Background swap using source image
         const result = await backgroundSwapWithFal(
           sourceImageUrl!,
           prompt,
