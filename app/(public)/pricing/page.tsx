@@ -13,8 +13,11 @@ export default function PricingPage() {
       {/* Header */}
       <header className="border-b border-border">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/" className="font-heading text-xl font-bold text-gold">
-            letmeflex.ai
+          <Link href="/" className="flex items-center gap-2.5">
+            <span className="w-2 h-2 rounded-full bg-gold animate-pulse-gold" />
+            <span className="font-heading text-xl font-extrabold text-white">
+              letmeflex<span className="text-gold">.ai</span>
+            </span>
           </Link>
           <div className="flex items-center gap-4">
             <Link

@@ -16,8 +16,11 @@ export function Footer() {
       <div className="mx-auto flex max-w-6xl flex-col items-center gap-8 px-4 py-12 md:flex-row md:justify-between">
         {/* Logo & tagline */}
         <div className="flex flex-col items-center gap-1 md:items-start">
-          <span className="font-heading text-xl font-bold gold-gradient-text">
-            letmeflex.ai
+          <span className="flex items-center gap-2.5">
+            <span className="w-2 h-2 rounded-full bg-gold animate-pulse-gold" />
+            <span className="font-heading text-xl font-extrabold text-white">
+              letmeflex<span className="text-gold">.ai</span>
+            </span>
           </span>
           <span className="font-body text-xs text-text-subtle">
             AI-generated luxury content

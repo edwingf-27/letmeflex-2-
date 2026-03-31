@@ -85,9 +85,7 @@ function ResetPasswordForm() {
     <div className="min-h-screen bg-[#0C0C0E] flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-[#F9CA1F] text-3xl font-bold tracking-tight">
-            letmeflex.ai
-          </h1>
+          <div className="flex items-center justify-center gap-2.5"><span className="w-2.5 h-2.5 rounded-full bg-[#F9CA1F] animate-pulse" /><span className="font-heading text-3xl font-extrabold text-white">letmeflex<span className="text-[#F9CA1F]">.ai</span></span></div>
           <p className="text-zinc-500 mt-2 text-sm">
             {token ? "Set your new password" : "Reset your password"}
           </p>

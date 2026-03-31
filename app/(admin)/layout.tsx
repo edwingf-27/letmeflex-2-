@@ -75,10 +75,11 @@ export default function AdminLayout({
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex flex-col w-64 border-r border-border bg-[#0A0A0C] fixed h-full z-30">
         <div className="p-6 border-b border-border">
-          <Link href="/admin" className="block">
-            <h1 className="font-heading text-xl font-bold text-gold">
-              letmeflex.ai
-            </h1>
+          <Link href="/admin" className="flex items-center gap-2.5">
+            <span className="w-2 h-2 rounded-full bg-gold animate-pulse-gold" />
+            <span className="font-heading text-xl font-extrabold text-white">
+              letmeflex<span className="text-gold">.ai</span>
+            </span>
           </Link>
           <span className="inline-flex items-center mt-2 px-2.5 py-0.5 rounded-md text-[10px] font-heading font-bold uppercase tracking-widest bg-red-500/10 text-red-400 border border-red-500/20">
             Admin Panel
@@ -146,10 +147,11 @@ export default function AdminLayout({
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-[#0A0A0C] border-b border-border z-40 flex items-center justify-between px-4">
         <div className="flex items-center gap-3">
-          <Link href="/admin">
-            <h1 className="font-heading text-lg font-bold text-gold">
-              letmeflex.ai
-            </h1>
+          <Link href="/admin" className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse-gold" />
+            <span className="font-heading text-lg font-extrabold text-white">
+              letmeflex<span className="text-gold">.ai</span>
+            </span>
           </Link>
           <span className="px-2 py-0.5 rounded text-[9px] font-heading font-bold uppercase tracking-widest bg-red-500/10 text-red-400 border border-red-500/20">
             Admin

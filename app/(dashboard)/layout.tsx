@@ -42,10 +42,11 @@ export default function DashboardLayout({
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex flex-col w-64 border-r border-border bg-surface fixed h-full z-30">
         <div className="p-6">
-          <Link href="/dashboard" className="block">
-            <h1 className="font-heading text-xl font-bold text-gold">
-              letmeflex.ai
-            </h1>
+          <Link href="/dashboard" className="flex items-center gap-2.5">
+            <span className="w-2 h-2 rounded-full bg-gold animate-pulse-gold" />
+            <span className="font-heading text-xl font-extrabold text-white">
+              letmeflex<span className="text-gold">.ai</span>
+            </span>
           </Link>
         </div>
 
@@ -107,10 +108,11 @@ export default function DashboardLayout({
 
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-surface border-b border-border z-40 flex items-center justify-between px-4">
-        <Link href="/dashboard">
-          <h1 className="font-heading text-lg font-bold text-gold">
-            letmeflex.ai
-          </h1>
+        <Link href="/dashboard" className="flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse-gold" />
+          <span className="font-heading text-lg font-extrabold text-white">
+            letmeflex<span className="text-gold">.ai</span>
+          </span>
         </Link>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gold/10 border border-gold/20">
