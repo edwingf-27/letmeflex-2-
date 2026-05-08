@@ -41,7 +41,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       async authorize(credentials) {
         try {
+          console.log("[AUTH][CREDENTIALS][1] authorize called", {
+            hasEmail: !!credentials?.email,
+            hasPassword: !!credentials?.password,
+          });
+
           if (!credentials?.email || !credentials?.password) return null;
+
+          console.log("[AUTH][CREDENTIALS][2] querying user in DB", {
+            email: credentials.email,
+          });
 
           const { data: user, error } = await db
             .from("User")
@@ -49,30 +58,60 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             .eq("email", credentials.email as string)
             .single();
 
+          console.log("[AUTH][CREDENTIALS][2] DB query result", {
+            foundUser: !!user,
+            hasPasswordHash: !!user?.passwordHash,
+            dbError: error?.message || null,
+          });
+
           if (error || !user || !user.passwordHash) {
             console.log("[AUTH] User not found or no password");
+            console.log("[AUTH][CREDENTIALS][4] returning null", {
+              reason: "missing_user_or_password_hash",
+            });
             return null;
           }
+
+          console.log("[AUTH][CREDENTIALS][3] verifying password", {
+            userId: user.id,
+          });
 
           const isValid = await bcrypt.compare(
             credentials.password as string,
             user.passwordHash
           );
 
+          console.log("[AUTH][CREDENTIALS][3] password check result", {
+            isValid,
+            userId: user.id,
+          });
+
           if (!isValid) {
             console.log("[AUTH] Password mismatch");
+            console.log("[AUTH][CREDENTIALS][4] returning null", {
+              reason: "password_mismatch",
+              userId: user.id,
+            });
             return null;
           }
 
           console.log("[AUTH] Success, returning user:", user.id);
-          return {
+          const authUser = {
             id: user.id,
             email: user.email,
             name: user.name,
             image: user.image,
           };
+          console.log("[AUTH][CREDENTIALS][4] returning user", {
+            userId: authUser.id,
+            email: authUser.email,
+          });
+          return authUser;
         } catch (err: any) {
           console.error("[AUTH] authorize error:", err.message);
+          console.error("[AUTH][CREDENTIALS][4] returning null due to exception", {
+            error: err?.message || "unknown_error",
+          });
           return null;
         }
       },
