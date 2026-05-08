@@ -9,10 +9,7 @@ const inferredAppUrl =
   process.env.AUTH_URL ||
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined);
 const resolvedSecret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
-const isHttpsApp = inferredAppUrl?.startsWith("https://") ?? false;
-const sessionCookieName = isHttpsApp
-  ? "__Secure-authjs.session-token"
-  : "authjs.session-token";
+const isHttpsApp = inferredAppUrl?.startsWith("https://") ?? process.env.NODE_ENV === "production";
 
 if (inferredAppUrl) {
   process.env.NEXTAUTH_URL = process.env.NEXTAUTH_URL || inferredAppUrl;
@@ -27,17 +24,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
   secret: resolvedSecret,
   trustHost: true,
-  cookies: {
-    sessionToken: {
-      name: sessionCookieName,
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: isHttpsApp,
-      },
-    },
-  },
+  useSecureCookies: isHttpsApp,
   pages: {
     signIn: "/login",
   },

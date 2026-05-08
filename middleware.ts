@@ -15,6 +15,7 @@ const adminPaths = ["/admin"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const authSecret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
 
   const isProtected = protectedPaths.some(
     (path) => pathname === path || pathname.startsWith(path + "/")
@@ -27,7 +28,7 @@ export async function middleware(req: NextRequest) {
   // NextAuth v5 (Auth.js) uses "authjs" as cookie prefix, not "next-auth"
   const token = await getToken({
     req,
-    secret: process.env.NEXTAUTH_SECRET,
+    secret: authSecret,
   });
 
   if (!token) {
