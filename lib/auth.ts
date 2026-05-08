@@ -8,15 +8,36 @@ const inferredAppUrl =
   process.env.NEXTAUTH_URL ||
   process.env.AUTH_URL ||
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined);
+const resolvedSecret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
+const isHttpsApp = inferredAppUrl?.startsWith("https://") ?? false;
+const sessionCookieName = isHttpsApp
+  ? "__Secure-authjs.session-token"
+  : "authjs.session-token";
 
 if (inferredAppUrl) {
   process.env.NEXTAUTH_URL = process.env.NEXTAUTH_URL || inferredAppUrl;
   process.env.AUTH_URL = process.env.AUTH_URL || inferredAppUrl;
 }
+if (resolvedSecret) {
+  process.env.NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET || resolvedSecret;
+  process.env.AUTH_SECRET = process.env.AUTH_SECRET || resolvedSecret;
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
+  secret: resolvedSecret,
   trustHost: true,
+  cookies: {
+    sessionToken: {
+      name: sessionCookieName,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: isHttpsApp,
+      },
+    },
+  },
   pages: {
     signIn: "/login",
   },
