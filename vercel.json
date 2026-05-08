@@ -1,4 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "pnpm install --config.confirmModulesPurge=false && pnpm approve-builds"
+  "installCommand": "pnpm install && pnpm exec prisma generate"
 }
