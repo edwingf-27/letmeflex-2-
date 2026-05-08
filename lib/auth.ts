@@ -4,6 +4,16 @@ import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { db, generateId } from "@/lib/db";
 
+const inferredAppUrl =
+  process.env.NEXTAUTH_URL ||
+  process.env.AUTH_URL ||
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined);
+
+if (inferredAppUrl) {
+  process.env.NEXTAUTH_URL = process.env.NEXTAUTH_URL || inferredAppUrl;
+  process.env.AUTH_URL = process.env.AUTH_URL || inferredAppUrl;
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
   trustHost: true,
