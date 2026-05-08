@@ -9,7 +9,12 @@ import { Sparkles, Copy, Check, ArrowRight, Coins, Users } from "lucide-react";
 import { useState } from "react";
 import Image from "next/image";
 
-const topCategories = ["watches", "cars", "yacht", "penthouse"];
+const quickStartItems = [
+  { key: "watches", filter: "Watches" },
+  { key: "cars", filter: "Cars" },
+  { key: "yacht", filter: "Lifestyle" },
+  { key: "penthouse", filter: "Lifestyle" },
+];
 
 export default function DashboardPage() {
   const { data: session } = useSession();
@@ -71,12 +76,12 @@ export default function DashboardPage() {
       <div>
         <h2 className="text-xl font-heading font-semibold mb-4">Quick Start</h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {topCategories.map((key) => {
+          {quickStartItems.map(({ key, filter }) => {
             const cat = CATEGORIES[key];
             return (
               <Link
                 key={key}
-                href={`/generate/${key}`}
+                href={`/dashboard/generate?category=${encodeURIComponent(filter)}`}
                 className="group relative overflow-hidden rounded-2xl bg-surface border border-border hover:border-gold/30 transition-all p-6 flex flex-col items-center text-center gap-3"
               >
                 <span className="text-4xl">{cat.icon}</span>
@@ -90,7 +95,7 @@ export default function DashboardPage() {
           })}
         </div>
         <Link
-          href="/generate"
+          href="/dashboard/generate"
           className="inline-flex items-center gap-2 mt-4 text-sm text-text-muted hover:text-gold transition-colors"
         >
           View all categories <ArrowRight className="w-4 h-4" />

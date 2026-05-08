@@ -17,6 +17,18 @@ const NEG = "watermark, text, logo, blurry, low quality, cartoon, illustration, 
 
 export const SCENE_CATEGORIES: SceneCategory[] = [
   {
+    id: "watches",
+    label: "Watches",
+    icon: "⌚",
+    scenes: [
+      { id: "rolex-yacht-master-yacht", label: "Rolex Yacht-Master on a Yacht", category: "watches", prompt: `Ultra-photorealistic close-up photo of a person wearing a Rolex Yacht-Master on the deck of a luxury yacht at golden hour, ocean reflections, premium maritime lifestyle mood. ${CAMERA}` },
+      { id: "patek-gastronomic-restaurant", label: "Patek Philippe at Fine Dining", category: "watches", prompt: `Ultra-photorealistic photo of a person wearing a Patek Philippe while seated at a Michelin-star restaurant table, candlelight, elegant plating, refined luxury atmosphere. ${CAMERA}` },
+      { id: "ap-royal-oak-private-jet", label: "AP Royal Oak in Private Jet", category: "watches", prompt: `Ultra-photorealistic photo of a person inside a private jet cabin wearing an Audemars Piguet Royal Oak, cream leather seats, soft ambient lighting, aviation luxury vibe. ${CAMERA}` },
+      { id: "richard-mille-supercar", label: "Richard Mille in Supercar", category: "watches", prompt: `Ultra-photorealistic photo from inside a supercar cockpit showing a wrist with a Richard Mille on the steering wheel, carbon fiber details, moody cinematic lighting. ${CAMERA}` },
+      { id: "rolex-daytona-monaco", label: "Rolex Daytona in Monaco", category: "watches", prompt: `Ultra-photorealistic photo of a person wearing a Rolex Daytona in Monaco harbor district, luxury cars and yachts in background, sunset light, prestigious Riviera ambiance. ${CAMERA}` },
+    ],
+  },
+  {
     id: "cars",
     label: "Cars",
     icon: "🚗",

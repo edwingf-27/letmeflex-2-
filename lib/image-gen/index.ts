@@ -10,6 +10,30 @@ import type {
 
 export type { GenerationRequest, GenerationResult, MultiGenerationResult };
 
+function normalizeFalModelId(modelId?: string): string {
+  if (!modelId) return "fal-ai/flux/dev";
+  if (modelId === "fal-ai/flux") return "fal-ai/flux/dev";
+  return modelId;
+}
+
+function getPreferredProviderWithoutDb():
+  | { provider: "fal"; modelId: string }
+  | { provider: "replicate"; modelId: string }
+  | { provider: "openai"; modelId: string } {
+  if (process.env.FAL_KEY?.trim()) {
+    return { provider: "fal", modelId: "fal-ai/flux/dev" };
+  }
+  if (process.env.REPLICATE_API_TOKEN?.trim()) {
+    return { provider: "replicate", modelId: "black-forest-labs/flux-1.1-pro" };
+  }
+  if (process.env.OPENAI_API_KEY?.trim()) {
+    return { provider: "openai", modelId: "gpt-image-1" };
+  }
+  throw new Error(
+    "No AI provider configured. Set one of: FAL_KEY, REPLICATE_API_TOKEN, OPENAI_API_KEY in .env.local."
+  );
+}
+
 /**
  * Backward-compatible single image generation.
  */
@@ -24,18 +48,25 @@ export async function generateImage(
     .single();
 
   if (!activeModel) {
-    return generateSingleWithFal(req);
+    const fallback = getPreferredProviderWithoutDb();
+    if (fallback.provider === "fal") {
+      return generateSingleWithFal(req, fallback.modelId);
+    }
+    if (fallback.provider === "replicate") {
+      return generateWithReplicate(req, fallback.modelId);
+    }
+    return generateWithOpenAI(req, fallback.modelId);
   }
 
   switch (activeModel.provider) {
     case "fal":
-      return generateSingleWithFal(req, activeModel.modelId);
+      return generateSingleWithFal(req, normalizeFalModelId(activeModel.modelId));
     case "replicate":
       return generateWithReplicate(req, activeModel.modelId);
     case "openai":
       return generateWithOpenAI(req, activeModel.modelId);
     default:
-      return generateSingleWithFal(req);
+      return generateSingleWithFal(req, "fal-ai/flux/dev");
   }
 }
 
@@ -54,8 +85,31 @@ export async function generateImages(
     .eq("isActive", true)
     .single();
 
-  if (!activeModel || activeModel.provider === "fal") {
-    return generateWithFal(req, activeModel?.modelId || "fal-ai/flux/dev", numImages);
+  if (!activeModel) {
+    const fallback = getPreferredProviderWithoutDb();
+    if (fallback.provider === "fal") {
+      return generateWithFal(req, fallback.modelId, numImages);
+    }
+
+    const results: Array<{ imageUrl: string; seed?: number }> = [];
+    const start = Date.now();
+    for (let i = 0; i < numImages; i++) {
+      const single =
+        fallback.provider === "replicate"
+          ? await generateWithReplicate(req, fallback.modelId)
+          : await generateWithOpenAI(req, fallback.modelId);
+      results.push({ imageUrl: single.imageUrl });
+    }
+    return {
+      images: results,
+      modelUsed: fallback.modelId,
+      provider: fallback.provider,
+      durationMs: Date.now() - start,
+    };
+  }
+
+  if (activeModel.provider === "fal") {
+    return generateWithFal(req, normalizeFalModelId(activeModel.modelId), numImages);
   }
 
   // For non-fal providers, fall back to generating N single images

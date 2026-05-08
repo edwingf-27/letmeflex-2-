@@ -3,11 +3,24 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 let _supabaseAdmin: SupabaseClient;
 let _supabase: SupabaseClient;
 
+function requireEnv(
+  name:
+    | "NEXT_PUBLIC_SUPABASE_URL"
+    | "SUPABASE_SERVICE_ROLE_KEY"
+    | "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+): string {
+  const value = process.env[name];
+  if (!value || value === "placeholder") {
+    throw new Error(`[SUPABASE_CONFIG_ERROR] Missing required env var: ${name}`);
+  }
+  return value;
+}
+
 export function getSupabaseAdmin(): SupabaseClient {
   if (!_supabaseAdmin) {
     _supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co",
-      process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder"
+      requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
+      requireEnv("SUPABASE_SERVICE_ROLE_KEY")
     );
   }
   return _supabaseAdmin;
@@ -16,8 +29,8 @@ export function getSupabaseAdmin(): SupabaseClient {
 export function getSupabase(): SupabaseClient {
   if (!_supabase) {
     _supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co",
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder"
+      requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
+      requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
     );
   }
   return _supabase;

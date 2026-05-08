@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, DragEvent } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ALL_SCENES, SCENE_CATEGORIES } from "@/types/scenes";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -34,14 +34,25 @@ interface UploadedPhoto {
   uploading: boolean;
 }
 
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
 const CATEGORY_FILTERS = [
   { id: "all", label: "All", icon: "🔥" },
   ...SCENE_CATEGORIES.map((c) => ({ id: c.id, label: c.label, icon: c.icon })),
 ];
 
+const CATEGORY_QUERY_ALIASES: Record<string, string> = {
+  cars: "cars",
+  car: "cars",
+  lifestyle: "lifestyle",
+  watches: "watches",
+  watch: "watches",
+};
+
 export default function GeneratePage() {
   const { data: session } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const user = session?.user;
 
   // Step 1: Scene selection
@@ -71,6 +82,24 @@ export default function GeneratePage() {
       : ALL_SCENES.filter((s) => s.category === activeFilter);
 
   const creditsCost = variationCount;
+
+  useEffect(() => {
+    const categoryParam = searchParams.get("category");
+    if (!categoryParam) return;
+
+    const normalized = categoryParam.trim().toLowerCase();
+    const mapped =
+      CATEGORY_QUERY_ALIASES[normalized] ??
+      SCENE_CATEGORIES.find(
+        (category) =>
+          category.id.toLowerCase() === normalized ||
+          category.label.toLowerCase() === normalized
+      )?.id;
+
+    if (mapped) {
+      setActiveFilter(mapped);
+    }
+  }, [searchParams]);
 
   // Clean up polling + preview URLs on unmount
   useEffect(() => {
@@ -126,8 +155,8 @@ export default function GeneratePage() {
 
   // ---- File upload ----
   const handleFileSelect = async (file: File) => {
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please upload an image file.");
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      toast.error("Allowed formats: JPG, PNG, WEBP.");
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -152,7 +181,7 @@ export default function GeneratePage() {
     // Upload immediately
     try {
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("image", file);
       const res = await fetch("/api/upload/source-image", {
         method: "POST",
         body: formData,
@@ -174,6 +203,24 @@ export default function GeneratePage() {
     }
   };
 
+  const handleFilesSelect = (files: File[]) => {
+    if (files.length === 0) return;
+
+    const remainingSlots = Math.max(0, 3 - facePhotos.length);
+    if (remainingSlots === 0) {
+      toast.error("Maximum 3 photos allowed.");
+      return;
+    }
+
+    if (files.length > remainingSlots) {
+      toast.error(`You can upload up to ${remainingSlots} more photo${remainingSlots > 1 ? "s" : ""}.`);
+    }
+
+    files.slice(0, remainingSlots).forEach((file) => {
+      void handleFileSelect(file);
+    });
+  };
+
   const removePhoto = (previewUrl: string) => {
     setFacePhotos((prev) => {
       const removed = prev.find((p) => p.previewUrl === previewUrl);
@@ -185,7 +232,7 @@ export default function GeneratePage() {
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const files = Array.from(e.dataTransfer.files);
-    files.forEach((f) => handleFileSelect(f));
+    handleFilesSelect(files);
   };
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
@@ -624,11 +671,14 @@ export default function GeneratePage() {
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept="image/*"
+                      accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                      multiple
                       className="hidden"
                       onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleFileSelect(file);
+                        const files = e.target.files
+                          ? Array.from(e.target.files)
+                          : [];
+                        handleFilesSelect(files);
                         // Reset input so same file can be re-selected
                         e.target.value = "";
                       }}

@@ -1,8 +1,17 @@
 import { fal } from "@fal-ai/client";
 
 // Ensure fal.ai credentials are set from env
-if (process.env.FAL_KEY) {
-  fal.config({ credentials: process.env.FAL_KEY });
+const falKey = process.env.FAL_KEY?.trim();
+if (falKey) {
+  fal.config({ credentials: falKey });
+}
+
+function assertFalConfigured() {
+  if (!falKey) {
+    throw new Error(
+      "FAL_KEY is missing. Add FAL_KEY in .env.local to enable image generation with fal.ai."
+    );
+  }
 }
 
 export interface GenerationRequest {
@@ -35,6 +44,7 @@ export async function generateWithFal(
   modelId: string = "fal-ai/flux/dev",
   numImages: number = 1
 ): Promise<MultiGenerationResult> {
+  assertFalConfigured();
   const start = Date.now();
 
   const result = await fal.subscribe(modelId, {
@@ -100,6 +110,7 @@ export async function faceSwapWithFal(
   sourceImageUrl: string,
   targetFaceUrl: string
 ): Promise<GenerationResult> {
+  assertFalConfigured();
   const start = Date.now();
 
   const result = await fal.subscribe("fal-ai/face-swap", {
@@ -130,6 +141,7 @@ export async function backgroundSwapWithFal(
   backgroundPrompt: string,
   numImages: number = 1
 ): Promise<MultiGenerationResult> {
+  assertFalConfigured();
   const start = Date.now();
 
   const result = await fal.subscribe("fal-ai/flux/dev/image-to-image", {

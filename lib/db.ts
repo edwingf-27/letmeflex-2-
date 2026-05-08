@@ -5,11 +5,19 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 let _db: SupabaseClient | null = null;
 
+function requireEnv(name: "NEXT_PUBLIC_SUPABASE_URL" | "SUPABASE_SERVICE_ROLE_KEY"): string {
+  const value = process.env[name];
+  if (!value || value === "placeholder") {
+    throw new Error(`[DB_CONFIG_ERROR] Missing required env var: ${name}`);
+  }
+  return value;
+}
+
 function getDb(): SupabaseClient {
   if (!_db) {
     _db = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co",
-      process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder",
+      requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
+      requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
       { auth: { persistSession: false } }
     );
   }

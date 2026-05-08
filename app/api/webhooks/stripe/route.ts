@@ -6,7 +6,9 @@ import { sendPaymentFailedEmail } from '@/lib/resend';
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-function getStripeId(value: string | Stripe.Customer | Stripe.DeletedCustomer | null): string | null {
+function getStripeId(
+  value: string | Stripe.Customer | Stripe.DeletedCustomer | Stripe.Subscription | null
+): string | null {
   if (!value) return null;
   return typeof value === 'string' ? value : value.id;
 }

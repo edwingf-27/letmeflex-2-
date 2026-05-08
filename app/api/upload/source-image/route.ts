@@ -4,6 +4,11 @@ import { supabaseAdmin } from "@/lib/supabase";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+const FILE_EXT_BY_TYPE: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
 
 export async function POST(req: Request) {
   try {
@@ -38,7 +43,8 @@ export async function POST(req: Request) {
 
     const userId = session.user.id;
     const timestamp = Date.now();
-    const path = `${userId}/${timestamp}.jpg`;
+    const extension = FILE_EXT_BY_TYPE[file.type] ?? "jpg";
+    const path = `${userId}/${timestamp}.${extension}`;
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
