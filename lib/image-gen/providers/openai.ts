@@ -16,8 +16,8 @@ export async function generateWithOpenAI(
       model: modelId,
       prompt: req.prompt,
       n: 1,
-      size: "1792x1024",
-      quality: "hd",
+      size: "1536x1024",
+      quality: "high",
     }),
   });
 

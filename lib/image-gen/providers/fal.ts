@@ -8,9 +8,7 @@ if (falKey) {
 
 function assertFalConfigured() {
   if (!falKey) {
-    throw new Error(
-      "FAL_KEY is missing. Add FAL_KEY in .env.local to enable image generation with fal.ai."
-    );
+    return;
   }
 }
 
