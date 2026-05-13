@@ -1,15 +1,8 @@
 import { fal } from "@fal-ai/client";
 
-// Ensure fal.ai credentials are set from env
 const falKey = process.env.FAL_KEY?.trim();
 if (falKey) {
   fal.config({ credentials: falKey });
-}
-
-function assertFalConfigured() {
-  if (!falKey) {
-    return;
-  }
 }
 
 export interface GenerationRequest {
@@ -34,63 +27,43 @@ export interface MultiGenerationResult {
   durationMs: number;
 }
 
-/**
- * Generate multiple images with fal.ai. Returns all images.
- */
 export async function generateWithFal(
   req: GenerationRequest,
-  modelId: string = "fal-ai/flux/dev",
+  modelId: string = "fal-ai/flux-pro/v1.1",
   numImages: number = 1
 ): Promise<MultiGenerationResult> {
-  assertFalConfigured();
   const start = Date.now();
 
-  const result = await fal.subscribe(modelId, {
+  const result = await fal.subscribe("fal-ai/flux-pro/v1.1", {
     input: {
       prompt: req.prompt,
-      negative_prompt: req.negativePrompt,
+    
       image_size: "landscape_16_9",
-      num_inference_steps: req.steps || 28,
-      guidance_scale: 3.5,
+     
       num_images: numImages,
+      safety_tolerance: "5",
     },
   }) as any;
 
-  // fal.subscribe wraps response in result.data
   const data = result.data || result;
-  const rawImages = data.images || data.output?.images || [];
+  const rawImages = data.images || [];
 
   const images = rawImages.map((img: any) => ({
-    imageUrl: img.url || img.image_url || "",
+    imageUrl: img.url || "",
     seed: img.seed ?? undefined,
   }));
 
-  // Fallback: if no images array, try single image fields
-  if (images.length === 0) {
-    const singleUrl =
-      data.images?.[0]?.url ||
-      data.output?.url ||
-      result.images?.[0]?.url ||
-      "";
-    if (singleUrl) {
-      images.push({ imageUrl: singleUrl, seed: undefined });
-    }
-  }
-
   return {
     images,
-    modelUsed: modelId,
+    modelUsed: "fal-ai/flux-pro/v1.1",
     provider: "fal",
     durationMs: Date.now() - start,
   };
 }
 
-/**
- * Backward-compatible single image generation.
- */
 export async function generateSingleWithFal(
   req: GenerationRequest,
-  modelId: string = "fal-ai/flux/dev"
+  modelId: string = "fal-ai/flux-pro/v1.1"
 ): Promise<GenerationResult> {
   const multi = await generateWithFal(req, modelId, 1);
   return {
@@ -101,80 +74,65 @@ export async function generateSingleWithFal(
   };
 }
 
-/**
- * Face swap: swap a face onto a base image.
- */
-export async function faceSwapWithFal(
-  sourceImageUrl: string,
-  targetFaceUrl: string
-): Promise<GenerationResult> {
-  assertFalConfigured();
+export async function generateWithFaceAndPrompt(
+  prompt: string,
+  faceImageUrl: string,
+  numImages: number = 1
+): Promise<MultiGenerationResult> {
   const start = Date.now();
 
-  const result = await fal.subscribe("fal-ai/face-swap", {
+  const result = await fal.subscribe("fal-ai/pulid", {
     input: {
-      base_image_url: sourceImageUrl,
-      swap_image_url: targetFaceUrl,
+      prompt,
+      reference_images: [{ image_url: faceImageUrl }],
+      num_images: numImages,
+      image_size: "landscape_16_9",
     },
   }) as any;
 
   const data = result.data || result;
+  const rawImages = data.images || [];
+
+  const images = rawImages.map((img: any) => ({
+    imageUrl: img.url || "",
+    seed: img.seed ?? undefined,
+  }));
+
   return {
-    imageUrl:
-      data.image?.url ||
-      data.images?.[0]?.url ||
-      data.output?.url ||
-      "",
-    modelUsed: "fal-ai/face-swap",
+    images,
+    modelUsed: "fal-ai/pulid",
     provider: "fal",
     durationMs: Date.now() - start,
   };
 }
 
-/**
- * Background swap: use image-to-image to replace the background of a source image.
- */
 export async function backgroundSwapWithFal(
   itemImageUrl: string,
   backgroundPrompt: string,
   numImages: number = 1
 ): Promise<MultiGenerationResult> {
-  assertFalConfigured();
   const start = Date.now();
 
-  const result = await fal.subscribe("fal-ai/flux/dev/image-to-image", {
+  const result = await fal.subscribe("fal-ai/flux-pro/v1.1", {
     input: {
-      image_url: itemImageUrl,
       prompt: backgroundPrompt,
-      strength: 0.75,
-      num_inference_steps: 28,
-      guidance_scale: 3.5,
+      image_size: "landscape_16_9",
+     
       num_images: numImages,
     },
   }) as any;
 
   const data = result.data || result;
-  const rawImages = data.images || data.output?.images || [];
+  const rawImages = data.images || [];
 
   const images = rawImages.map((img: any) => ({
-    imageUrl: img.url || img.image_url || "",
+    imageUrl: img.url || "",
     seed: img.seed ?? undefined,
   }));
 
-  if (images.length === 0) {
-    const singleUrl =
-      data.images?.[0]?.url ||
-      data.output?.url ||
-      result.images?.[0]?.url ||
-      "";
-    if (singleUrl) {
-      images.push({ imageUrl: singleUrl, seed: undefined });
-    }
-  }
-
   return {
     images,
-    modelUsed: "fal-ai/flux/dev/image-to-image",
+    modelUsed: "fal-ai/flux-pro/v1.1",
     provider: "fal",
     durationMs: Date.now() - start,
   };

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db, generateId } from "@/lib/db";
 import { generateImages } from "@/lib/image-gen";
-import { faceSwapWithFal, backgroundSwapWithFal } from "@/lib/image-gen/providers/fal";
+import { generateWithFaceAndPrompt, backgroundSwapWithFal } from "@/lib/image-gen/providers/fal";
 import { buildPrompt, buildBackgroundPrompt } from "@/lib/image-gen/prompts/builders";
 import { uploadGeneratedImages } from "@/lib/supabase";
 import { sendLowCreditsEmail } from "@/lib/resend";
@@ -141,29 +141,25 @@ export async function POST(req: Request) {
         let durationMs = 0;
         const seeds: (number | undefined)[] = [];
 
-        // Step 1: Generate base images
-        const baseResult = await generateImages({
-          prompt,
-          negativePrompt,
-          numImages: variationCount,
-        });
-
-        modelUsed = baseResult.modelUsed;
-        modelProvider = baseResult.provider;
-        durationMs = baseResult.durationMs;
-
-        // Step 2: If face photos provided, face swap each generated image
         if (facePhotos && facePhotos.length > 0) {
-          const faceUrl = facePhotos[0]; // Use first face photo as primary
-          for (const baseImg of baseResult.images) {
-            const swapped = await faceSwapWithFal(baseImg.imageUrl, faceUrl);
-            imageUrls.push(swapped.imageUrl);
-            durationMs += swapped.durationMs;
-            seeds.push(baseImg.seed);
+          // Generate directly with prompt + face photo in one step
+          const result = await generateWithFaceAndPrompt(prompt, facePhotos[0], variationCount);
+          modelUsed = result.modelUsed;
+          modelProvider = result.provider;
+          durationMs = result.durationMs;
+          for (const img of result.images) {
+            imageUrls.push(img.imageUrl);
+            seeds.push(img.seed);
           }
-          modelUsed = "fal-ai/face-swap";
         } else {
-          // No face swap — use base images directly
+          const baseResult = await generateImages({
+            prompt,
+            negativePrompt,
+            numImages: variationCount,
+          });
+          modelUsed = baseResult.modelUsed;
+          modelProvider = baseResult.provider;
+          durationMs = baseResult.durationMs;
           for (const img of baseResult.images) {
             imageUrls.push(img.imageUrl);
             seeds.push(img.seed);
@@ -421,27 +417,14 @@ export async function POST(req: Request) {
           seeds.push(img.seed);
         }
       } else if (effectiveMode === "face_swap") {
-        const baseResult = await generateImages({
-          prompt,
-          negativePrompt,
-          numImages: variationCount,
-        });
-
-        modelUsed = baseResult.modelUsed;
-        modelProvider = baseResult.provider;
-        durationMs = baseResult.durationMs;
-
-        for (const baseImg of baseResult.images) {
-          const swapped = await faceSwapWithFal(
-            baseImg.imageUrl,
-            effectiveFaceUrl!
-          );
-          imageUrls.push(swapped.imageUrl);
-          durationMs += swapped.durationMs;
-          seeds.push(baseImg.seed);
+        const result = await generateWithFaceAndPrompt(prompt, effectiveFaceUrl!, variationCount);
+        modelUsed = result.modelUsed;
+        modelProvider = result.provider;
+        durationMs = result.durationMs;
+        for (const img of result.images) {
+          imageUrls.push(img.imageUrl);
+          seeds.push(img.seed);
         }
-
-        modelUsed = "fal-ai/face-swap";
       } else if (effectiveMode === "background_swap") {
         const result = await backgroundSwapWithFal(
           sourceImageUrl!,

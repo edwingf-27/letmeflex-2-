@@ -20,15 +20,15 @@ function getPreferredProviderWithoutDb():
   | { provider: "fal"; modelId: string }
   | { provider: "replicate"; modelId: string }
   | { provider: "openai"; modelId: string } {
-  if (process.env.OPENAI_API_KEY?.trim()) {
-    return { provider: "openai", modelId: "gpt-image-1" };
-  }
-  if (process.env.FAL_KEY?.trim()) {
-    return { provider: "fal", modelId: "fal-ai/flux/dev" };
-  }
-  if (process.env.REPLICATE_API_TOKEN?.trim()) {
-    return { provider: "replicate", modelId: "black-forest-labs/flux-1.1-pro" };
-  }
+    if (process.env.FAL_KEY?.trim()) {
+      return { provider: "fal", modelId: "fal-ai/flux-pro/v1.1" };
+    }
+    if (process.env.OPENAI_API_KEY?.trim()) {
+      return { provider: "openai", modelId: "gpt-image-1" };
+    }
+    if (process.env.REPLICATE_API_TOKEN?.trim()) {
+      return { provider: "replicate", modelId: "black-forest-labs/flux-1.1-pro" };
+    }
   throw new Error(
     "No AI provider configured. Set one of: FAL_KEY, REPLICATE_API_TOKEN, OPENAI_API_KEY in .env.local."
   );

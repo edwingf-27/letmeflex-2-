@@ -64,20 +64,11 @@ export async function POST(req: Request) {
       );
     }
 
-    const { data: signedUrlData, error: signedUrlError } =
-      await supabaseAdmin.storage
-        .from("source-images")
-        .createSignedUrl(path, 3600); // 1 hour expiry
+    const { data: publicUrlData } = supabaseAdmin.storage
+  .from("source-images")
+  .getPublicUrl(path);
 
-    if (signedUrlError || !signedUrlData) {
-      console.error("[SOURCE_IMAGE_SIGNED_URL_ERROR]", signedUrlError?.message);
-      return NextResponse.json(
-        { error: "Failed to create signed URL" },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({ url: signedUrlData.signedUrl });
+return NextResponse.json({ url: publicUrlData.publicUrl });
   } catch (error: any) {
     console.error("[SOURCE_IMAGE_ROUTE_ERROR]", error?.message);
     return NextResponse.json(

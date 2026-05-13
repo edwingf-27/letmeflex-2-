@@ -87,12 +87,10 @@ export async function uploadFaceInput(
 
   if (error) throw new Error(`Face upload failed: ${error.message}`);
 
-  const { data } = await supabaseAdmin.storage
-    .from("face-inputs")
-    .createSignedUrl(path, 3600); // 1hr expiry
-
-  if (!data) throw new Error("Failed to create signed URL");
-  return data.signedUrl;
+  const { data } = supabaseAdmin.storage
+  .from("face-inputs")
+  .getPublicUrl(path);
+return data.publicUrl;
 }
 
 export async function uploadGeneratedImages(
