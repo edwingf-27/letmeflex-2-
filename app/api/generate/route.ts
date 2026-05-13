@@ -10,7 +10,7 @@ import { sendLowCreditsEmail } from "@/lib/resend";
 import { CATEGORIES } from "@/types/categories";
 import { ALL_SCENES, DEFAULT_NEGATIVE_PROMPT } from "@/types/scenes";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const generateSchema = z.object({
   // New scene-based flow

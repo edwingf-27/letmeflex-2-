@@ -27,6 +27,17 @@ export interface MultiGenerationResult {
   durationMs: number;
 }
 
+// Extrait les images d'une réponse FAL peu importe le format (images[] ou image)
+function extractImages(data: any): Array<{ url: string; seed?: number }> {
+  if (Array.isArray(data.images) && data.images.length > 0) {
+    return data.images;
+  }
+  if (data.image?.url) {
+    return [data.image];
+  }
+  return [];
+}
+
 export async function generateWithFal(
   req: GenerationRequest,
   modelId: string = "fal-ai/flux-pro/v1.1",
@@ -34,28 +45,30 @@ export async function generateWithFal(
 ): Promise<MultiGenerationResult> {
   const start = Date.now();
 
-  const result = await fal.subscribe("fal-ai/flux-pro/v1.1", {
+  const result = await fal.subscribe(modelId, {
     input: {
       prompt: req.prompt,
-    
       image_size: "landscape_16_9",
-     
       num_images: numImages,
-      safety_tolerance: "5",
+      safety_tolerance: 5,
     },
   }) as any;
 
   const data = result.data || result;
-  const rawImages = data.images || [];
+  const rawImages = extractImages(data);
+
+  if (rawImages.length === 0) {
+    throw new Error(`FAL AI (${modelId}) returned no images. The prompt may have been filtered.`);
+  }
 
   const images = rawImages.map((img: any) => ({
     imageUrl: img.url || "",
-    seed: img.seed ?? undefined,
+    seed: img.seed ?? data.seed ?? undefined,
   }));
 
   return {
     images,
-    modelUsed: "fal-ai/flux-pro/v1.1",
+    modelUsed: modelId,
     provider: "fal",
     durationMs: Date.now() - start,
   };
@@ -91,11 +104,15 @@ export async function generateWithFaceAndPrompt(
   }) as any;
 
   const data = result.data || result;
-  const rawImages = data.images || [];
+  const rawImages = extractImages(data);
+
+  if (rawImages.length === 0) {
+    throw new Error("FAL AI (fal-ai/pulid) returned no images. The prompt or face image may have been filtered.");
+  }
 
   const images = rawImages.map((img: any) => ({
     imageUrl: img.url || "",
-    seed: img.seed ?? undefined,
+    seed: img.seed ?? data.seed ?? undefined,
   }));
 
   return {
@@ -117,17 +134,21 @@ export async function backgroundSwapWithFal(
     input: {
       prompt: backgroundPrompt,
       image_size: "landscape_16_9",
-     
       num_images: numImages,
+      safety_tolerance: 5,
     },
   }) as any;
 
   const data = result.data || result;
-  const rawImages = data.images || [];
+  const rawImages = extractImages(data);
+
+  if (rawImages.length === 0) {
+    throw new Error("FAL AI returned no images for background swap.");
+  }
 
   const images = rawImages.map((img: any) => ({
     imageUrl: img.url || "",
-    seed: img.seed ?? undefined,
+    seed: img.seed ?? data.seed ?? undefined,
   }));
 
   return {
