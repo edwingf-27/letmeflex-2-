@@ -59,10 +59,23 @@ export function Hero() {
           </h1>
         </motion.div>
 
-        {/* Tagline */}
+        {/* Accroche */}
         <motion.p
           custom={2} variants={fadeUp} initial="hidden" animate="visible"
-          className="mt-6 max-w-xl text-lg text-zinc-400 md:text-xl leading-relaxed"
+          className="mt-4 font-heading font-bold text-2xl md:text-3xl tracking-tight"
+          style={{
+            background: "linear-gradient(90deg, #F9CA1F 0%, #fff 60%)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+          }}
+        >
+          Flex Without Limits.
+        </motion.p>
+
+        {/* Sous-tagline */}
+        <motion.p
+          custom={3} variants={fadeUp} initial="hidden" animate="visible"
+          className="mt-4 max-w-xl text-lg text-zinc-400 md:text-xl leading-relaxed"
         >
           Génère des photos lifestyle luxe avec ton visage.
           Supercars, jets privés, villas, montres — en quelques secondes.
@@ -70,7 +83,7 @@ export function Hero() {
 
         {/* CTAs */}
         <motion.div
-          custom={3} variants={fadeUp} initial="hidden" animate="visible"
+          custom={4} variants={fadeUp} initial="hidden" animate="visible"
           className="mt-10 flex flex-col sm:flex-row items-center gap-4"
         >
           <Link
@@ -89,7 +102,7 @@ export function Hero() {
 
         {/* Stats */}
         <motion.div
-          custom={4} variants={fadeUp} initial="hidden" animate="visible"
+          custom={5} variants={fadeUp} initial="hidden" animate="visible"
           className="mt-16 flex flex-wrap items-center justify-center gap-10"
         >
           {[
