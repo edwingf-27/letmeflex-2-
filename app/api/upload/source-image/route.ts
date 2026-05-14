@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 
-const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
+const MAX_SIZE = 20 * 1024 * 1024; // 20MB
 const FILE_EXT_BY_TYPE: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",
   "image/webp": "webp",
+  "image/heic": "jpg",
+  "image/heif": "jpg",
 };
 
 export async function POST(req: Request) {
@@ -18,7 +20,8 @@ export async function POST(req: Request) {
     }
 
     const formData = await req.formData();
-    const file = formData.get("image") as File | null;
+    // Accepte "file" ou "image" comme nom de champ
+    const file = (formData.get("file") ?? formData.get("image")) as File | null;
 
     if (!file) {
       return NextResponse.json(
@@ -27,9 +30,13 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!ALLOWED_TYPES.includes(file.type)) {
+    // HEIC peut être déclaré comme application/octet-stream sur certains appareils
+    const isHeic = file.name?.toLowerCase().endsWith(".heic") || file.name?.toLowerCase().endsWith(".heif");
+    const effectiveType = isHeic ? "image/heic" : file.type;
+
+    if (!ALLOWED_TYPES.includes(effectiveType) && !file.type.startsWith("image/")) {
       return NextResponse.json(
-        { error: "Invalid file type. Allowed: jpeg, png, webp" },
+        { error: "Invalid file type. Allowed: jpeg, png, webp, heic" },
         { status: 400 }
       );
     }
@@ -43,16 +50,19 @@ export async function POST(req: Request) {
 
     const userId = session.user.id;
     const timestamp = Date.now();
-    const extension = FILE_EXT_BY_TYPE[file.type] ?? "jpg";
+    const extension = FILE_EXT_BY_TYPE[effectiveType] ?? FILE_EXT_BY_TYPE[file.type] ?? "jpg";
     const path = `${userId}/${timestamp}.${extension}`;
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
+    // HEIC → on force le content-type en jpeg pour compatibilité FAL
+    const uploadContentType = isHeic ? "image/jpeg" : (file.type || "image/jpeg");
+
     const { error: uploadError } = await supabaseAdmin.storage
       .from("source-images")
       .upload(path, buffer, {
-        contentType: file.type,
+        contentType: uploadContentType,
         upsert: true,
       });
 

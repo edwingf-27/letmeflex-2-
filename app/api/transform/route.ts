@@ -140,16 +140,16 @@ export async function POST(req: Request) {
         else if (data.image?.url) outputUrl = data.image.url;
 
       } else {
-        // Tous les autres modes → flux-pro image-to-image
-        const result = await fal.subscribe("fal-ai/flux-pro/v1/image-to-image", {
+        // Tous les autres modes → flux/dev/image-to-image (paramètres validés)
+        const result = await fal.subscribe("fal-ai/flux/dev/image-to-image", {
           input: {
             image_url: imageUrl,
             prompt,
             strength: config.strength,
             num_inference_steps: 28,
-            guidance_scale: 4.0,
+            guidance_scale: 3.5,
             num_images: 1,
-            safety_tolerance: "5",
+            enable_safety_checker: true,
           },
         }) as any;
 
