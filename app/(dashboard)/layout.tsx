@@ -6,22 +6,24 @@ import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import {
   Sparkles,
-  ImageIcon,
-  Coins,
-  Settings,
-  LayoutDashboard,
   Crown,
+  Gift,
+  TrendingUp,
+  Clock,
+  Settings,
+  Coins,
   Menu,
   X,
 } from "lucide-react";
 import { useState } from "react";
 
 const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/generate", label: "Generate", icon: Sparkles },
-  { href: "/gallery", label: "My Gallery", icon: ImageIcon },
-  { href: "/credits", label: "Credits", icon: Coins },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/dashboard", label: "Studio", icon: Sparkles },
+  { href: "/credits", label: "Abonnement", icon: Crown },
+  { href: "/invite", label: "Invite & Gagne", icon: Gift },
+  { href: "/monetisation", label: "Monétisation", icon: TrendingUp },
+  { href: "/gallery", label: "Historique", icon: Clock },
+  { href: "/settings", label: "Paramètres", icon: Settings },
 ];
 
 export default function DashboardLayout({
@@ -38,19 +40,23 @@ export default function DashboardLayout({
   const plan = user?.plan ?? "FREE";
 
   return (
-    <div className="min-h-screen bg-bg flex">
-      {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex flex-col w-64 border-r border-border bg-surface fixed h-full z-30">
-        <div className="p-6">
+    <div className="min-h-screen bg-[#0C0C0E] flex">
+
+      {/* ── Desktop Sidebar ─────────────────────────────── */}
+      <aside className="hidden lg:flex flex-col w-60 border-r border-[#1E1E22] bg-[#111113] fixed h-full z-30">
+
+        {/* Logo */}
+        <div className="px-6 pt-7 pb-5">
           <Link href="/dashboard" className="flex items-center gap-2.5">
-            <span className="w-2 h-2 rounded-full bg-gold animate-pulse-gold" />
+            <span className="w-2 h-2 rounded-full bg-[#F9CA1F] animate-pulse" />
             <span className="font-heading text-xl font-extrabold text-white">
-              letmeflex<span className="text-gold">.ai</span>
+              letmeflex<span className="text-[#F9CA1F]">.ai</span>
             </span>
           </Link>
         </div>
 
-        <nav className="flex-1 px-3 space-y-1">
+        {/* Nav */}
+        <nav className="flex-1 px-3 space-y-0.5">
           {navItems.map((item) => {
             const isActive =
               pathname === item.href ||
@@ -60,109 +66,101 @@ export default function DashboardLayout({
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all",
+                  "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all",
                   isActive
-                    ? "bg-gold/10 text-gold border border-gold/20"
-                    : "text-text-muted hover:text-text-primary hover:bg-surface-2"
+                    ? "bg-[#F9CA1F]/10 text-[#F9CA1F] border border-[#F9CA1F]/20"
+                    : "text-zinc-400 hover:text-white hover:bg-white/5"
                 )}
               >
-                <item.icon className="w-5 h-5" />
+                <item.icon className="w-4 h-4 flex-shrink-0" />
                 {item.label}
               </Link>
             );
           })}
         </nav>
 
-        {/* Credits badge */}
-        <div className="p-4 mx-3 mb-3 rounded-xl bg-surface-2 border border-border">
+        {/* Credits */}
+        <div className="mx-3 mb-3 p-4 rounded-xl bg-[#F9CA1F]/5 border border-[#F9CA1F]/15">
           <div className="flex items-center gap-2 mb-1">
-            <Coins className="w-4 h-4 text-gold" />
-            <span className="text-xs font-medium uppercase tracking-wider text-text-muted">
-              Credits
+            <Coins className="w-3.5 h-3.5 text-[#F9CA1F]" />
+            <span className="text-xs text-zinc-500 uppercase tracking-wider font-medium">
+              Crédits
             </span>
           </div>
-          <p className="text-2xl font-heading font-bold text-gold">
+          <p className="text-2xl font-heading font-bold text-[#F9CA1F]">
             {credits >= 999999 ? "∞" : credits}
           </p>
-          <div className="flex items-center gap-1 mt-1">
-            <Crown className="w-3 h-3 text-text-subtle" />
-            <span className="text-xs text-text-subtle">{plan} plan</span>
-          </div>
+          <p className="text-xs text-zinc-600 mt-0.5 capitalize">{plan.toLowerCase()} plan</p>
         </div>
 
         {/* User */}
-        <div className="p-4 border-t border-border">
+        <div className="p-4 border-t border-[#1E1E22]">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-gold/20 flex items-center justify-center text-gold font-heading font-bold text-sm">
-              {user?.name?.[0] || user?.email?.[0] || "?"}
+            <div className="w-8 h-8 rounded-full bg-[#F9CA1F]/20 flex items-center justify-center text-[#F9CA1F] font-bold text-sm flex-shrink-0">
+              {user?.name?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "?"}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">
-                {user?.name || "User"}
+              <p className="text-sm font-medium text-white truncate">
+                {user?.name || "Utilisateur"}
               </p>
-              <p className="text-xs text-text-muted truncate">{user?.email}</p>
+              <p className="text-xs text-zinc-500 truncate">{user?.email}</p>
             </div>
           </div>
         </div>
       </aside>
 
-      {/* Mobile Header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-surface border-b border-border z-40 flex items-center justify-between px-4">
+      {/* ── Mobile Header ────────────────────────────────── */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-[#111113] border-b border-[#1E1E22] z-40 flex items-center justify-between px-4">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse-gold" />
-          <span className="font-heading text-lg font-extrabold text-white">
-            letmeflex<span className="text-gold">.ai</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-[#F9CA1F] animate-pulse" />
+          <span className="font-heading text-base font-extrabold text-white">
+            letmeflex<span className="text-[#F9CA1F]">.ai</span>
           </span>
         </Link>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gold/10 border border-gold/20">
-            <Coins className="w-3.5 h-3.5 text-gold" />
-            <span className="text-sm font-bold text-gold">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#F9CA1F]/10 border border-[#F9CA1F]/20">
+            <Coins className="w-3.5 h-3.5 text-[#F9CA1F]" />
+            <span className="text-sm font-bold text-[#F9CA1F]">
               {credits >= 999999 ? "∞" : credits}
             </span>
           </div>
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="p-2 rounded-lg hover:bg-surface-2"
+            className="p-2 rounded-lg hover:bg-white/5 text-zinc-400"
           >
-            {mobileOpen ? (
-              <X className="w-5 h-5" />
-            ) : (
-              <Menu className="w-5 h-5" />
-            )}
+            {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
       </div>
 
-      {/* Mobile Menu Overlay */}
+      {/* Mobile Menu */}
       {mobileOpen && (
         <div
-          className="lg:hidden fixed inset-0 bg-black/60 z-30"
+          className="lg:hidden fixed inset-0 bg-black/70 z-30"
           onClick={() => setMobileOpen(false)}
         >
           <div
-            className="absolute top-16 right-0 w-64 bg-surface border-l border-border h-full p-4"
+            className="absolute top-14 right-0 w-56 bg-[#111113] border-l border-[#1E1E22] h-full p-3"
             onClick={(e) => e.stopPropagation()}
           >
-            <nav className="space-y-1">
+            <nav className="space-y-0.5">
               {navItems.map((item) => {
                 const isActive =
                   pathname === item.href ||
-                  (item.href !== "/dashboard" &&
-                    pathname.startsWith(item.href));
+                  (item.href !== "/dashboard" && pathname.startsWith(item.href));
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     onClick={() => setMobileOpen(false)}
                     className={cn(
-                      "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all",
+                      "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all",
                       isActive
-                        ? "bg-gold/10 text-gold"
-                        : "text-text-muted hover:text-text-primary"
+                        ? "bg-[#F9CA1F]/10 text-[#F9CA1F]"
+                        : "text-zinc-400 hover:text-white hover:bg-white/5"
                     )}
                   >
-                    <item.icon className="w-5 h-5" />
+                    <item.icon className="w-4 h-4" />
                     {item.label}
                   </Link>
                 );
@@ -172,14 +170,14 @@ export default function DashboardLayout({
         </div>
       )}
 
-      {/* Main Content */}
-      <main className="flex-1 lg:ml-64 min-h-screen">
-        <div className="pt-16 lg:pt-0 p-4 lg:p-8">{children}</div>
+      {/* ── Main ─────────────────────────────────────────── */}
+      <main className="flex-1 lg:ml-60 min-h-screen">
+        <div className="pt-14 lg:pt-0 p-4 lg:p-8">{children}</div>
       </main>
 
-      {/* Mobile Bottom Nav */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-surface border-t border-border z-40 flex">
-        {navItems.slice(0, 4).map((item) => {
+      {/* ── Mobile Bottom Nav ─────────────────────────────── */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#111113] border-t border-[#1E1E22] z-40 flex pb-safe">
+        {[navItems[0], navItems[4], navItems[1], navItems[5]].map((item) => {
           const isActive =
             pathname === item.href ||
             (item.href !== "/dashboard" && pathname.startsWith(item.href));
@@ -189,11 +187,11 @@ export default function DashboardLayout({
               href={item.href}
               className={cn(
                 "flex-1 flex flex-col items-center gap-1 py-3 text-xs",
-                isActive ? "text-gold" : "text-text-subtle"
+                isActive ? "text-[#F9CA1F]" : "text-zinc-600"
               )}
             >
               <item.icon className="w-5 h-5" />
-              <span>{item.label.split(" ").pop()}</span>
+              <span>{item.label}</span>
             </Link>
           );
         })}
