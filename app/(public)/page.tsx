@@ -1,23 +1,17 @@
 import { Hero } from "@/components/landing/hero";
-import { GoldLine } from "@/components/ui/gold-line";
-import { CategoryGrid } from "@/components/landing/category-grid";
+import { StudioDemo } from "@/components/landing/studio-demo";
 import { HowItWorks } from "@/components/landing/how-it-works";
-import { PricingSection } from "@/components/landing/pricing-section";
-import { FAQ } from "@/components/landing/faq";
 import { Footer } from "@/components/landing/footer";
 
 export default function LandingPage() {
   return (
-    <main className="flex min-h-screen flex-col bg-bg">
+    <main className="flex min-h-screen flex-col bg-[#0C0C0E]">
+      {/* 1 — Titre */}
       <Hero />
-      <GoldLine />
-      <CategoryGrid />
-      <GoldLine />
+      {/* 2 — Studio interactif */}
+      <StudioDemo />
+      {/* 3 — Comment ça marche */}
       <HowItWorks />
-      <GoldLine />
-      <PricingSection />
-      <GoldLine />
-      <FAQ />
       <Footer />
     </main>
   );

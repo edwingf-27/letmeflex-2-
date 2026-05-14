@@ -2,129 +2,125 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Sparkles, Shield, Zap } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { ArrowDown, Sparkles } from "lucide-react";
 
 const fadeUp = {
-  hidden: { opacity: 0, y: 30 },
+  hidden: { opacity: 0, y: 40 },
   visible: (i: number) => ({
     opacity: 1,
     y: 0,
-    transition: { delay: i * 0.15, duration: 0.6, ease: "easeOut" as const },
+    transition: { delay: i * 0.15, duration: 0.7, ease: "easeOut" as const },
   }),
 };
 
-const trustBadges = [
-  { icon: Sparkles, label: "AI-powered generation" },
-  { icon: Shield, label: "Private & secure" },
-  { icon: Zap, label: "Ready in seconds" },
-];
-
 export function Hero() {
   return (
-    <section className="relative flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-bg px-4 py-20">
-      {/* CSS Grid pattern background */}
+    <section className="relative flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-[#0C0C0E] px-4">
+
+      {/* Grid background */}
       <div
         className="pointer-events-none absolute inset-0"
         style={{
-          backgroundImage: `linear-gradient(rgba(42,42,46,0.3) 1px, transparent 1px),
-                            linear-gradient(90deg, rgba(42,42,46,0.3) 1px, transparent 1px)`,
-          backgroundSize: "64px 64px",
+          backgroundImage: `linear-gradient(rgba(42,42,46,0.35) 1px, transparent 1px),
+                            linear-gradient(90deg, rgba(42,42,46,0.35) 1px, transparent 1px)`,
+          backgroundSize: "60px 60px",
         }}
-        aria-hidden="true"
       />
 
-      {/* Radial glow */}
+      {/* Gold radial glow */}
       <div
-        className="pointer-events-none absolute left-1/2 top-1/3 -translate-x-1/2 -translate-y-1/2"
+        className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
         style={{
-          width: "800px",
+          width: "900px",
           height: "600px",
-          background:
-            "radial-gradient(ellipse, rgba(249,202,31,0.06) 0%, transparent 70%)",
+          background: "radial-gradient(ellipse, rgba(249,202,31,0.07) 0%, transparent 65%)",
         }}
-        aria-hidden="true"
       />
 
-      <div className="relative z-10 mx-auto flex max-w-4xl flex-col items-center text-center">
+      <div className="relative z-10 flex flex-col items-center text-center max-w-5xl mx-auto">
+
         {/* Badge */}
         <motion.div
-          custom={0}
-          variants={fadeUp}
-          initial="hidden"
-          animate="visible"
-          className="mb-8 inline-flex items-center gap-2 rounded-full border border-gold/20 bg-gold/5 px-4 py-1.5"
+          custom={0} variants={fadeUp} initial="hidden" animate="visible"
+          className="mb-8 inline-flex items-center gap-2 rounded-full border border-[#F9CA1F]/20 bg-[#F9CA1F]/5 px-4 py-1.5"
         >
-          <Sparkles className="h-3.5 w-3.5 text-gold" />
-          <span className="font-body text-xs font-medium tracking-wide text-gold">
-            AI-Generated Luxury Content
+          <Sparkles className="h-3.5 w-3.5 text-[#F9CA1F]" />
+          <span className="text-xs font-medium tracking-wide text-[#F9CA1F]">
+            Génération d'images IA · Lifestyle luxe
           </span>
         </motion.div>
 
-        {/* Headline */}
-        <motion.h1
-          custom={1}
-          variants={fadeUp}
-          initial="hidden"
-          animate="visible"
-          className="font-heading text-display-1 text-text-primary"
-        >
-          Flex Without{" "}
-          <span className="gold-gradient-text">Limits.</span>
-        </motion.h1>
+        {/* Main title */}
+        <motion.div custom={1} variants={fadeUp} initial="hidden" animate="visible">
+          <h1 className="font-heading font-extrabold leading-none tracking-tight text-white"
+              style={{ fontSize: "clamp(3.5rem, 12vw, 9rem)" }}>
+            letmeflex
+            <span className="text-[#F9CA1F]">.ai</span>
+          </h1>
+        </motion.div>
 
-        {/* Subheadline */}
+        {/* Tagline */}
         <motion.p
-          custom={2}
-          variants={fadeUp}
-          initial="hidden"
-          animate="visible"
-          className="mt-6 max-w-2xl font-body text-lg text-text-muted md:text-xl"
+          custom={2} variants={fadeUp} initial="hidden" animate="visible"
+          className="mt-6 max-w-xl text-lg text-zinc-400 md:text-xl leading-relaxed"
         >
-          Generate stunning luxury lifestyle images with AI.
-          Watches, supercars, mansions, yachts — your content, your flex.
+          Génère des photos lifestyle luxe avec ton visage.
+          Supercars, jets privés, villas, montres — en quelques secondes.
         </motion.p>
 
         {/* CTAs */}
         <motion.div
-          custom={3}
-          variants={fadeUp}
-          initial="hidden"
-          animate="visible"
-          className="mt-10 flex flex-col items-center gap-4 sm:flex-row"
+          custom={3} variants={fadeUp} initial="hidden" animate="visible"
+          className="mt-10 flex flex-col sm:flex-row items-center gap-4"
         >
-          <Link href="/register">
-            <Button variant="primary" size="lg">
-              Start For Free
-            </Button>
+          <Link
+            href="/register"
+            className="px-8 py-3.5 rounded-2xl bg-[#F9CA1F] text-black font-heading font-bold text-base hover:bg-[#F9CA1F]/90 transition-all active:scale-95"
+          >
+            Commencer gratuitement
           </Link>
-          <a href="#categories">
-            <Button variant="ghost" size="lg" className="border border-border">
-              See Examples
-            </Button>
+          <a
+            href="#studio"
+            className="px-8 py-3.5 rounded-2xl border border-[#2A2A2E] text-zinc-300 text-base hover:border-[#F9CA1F]/30 hover:text-white transition-all"
+          >
+            Voir comment ça marche
           </a>
         </motion.div>
 
-        {/* Trust badges */}
+        {/* Stats */}
         <motion.div
-          custom={4}
-          variants={fadeUp}
-          initial="hidden"
-          animate="visible"
-          className="mt-16 flex flex-wrap items-center justify-center gap-8"
+          custom={4} variants={fadeUp} initial="hidden" animate="visible"
+          className="mt-16 flex flex-wrap items-center justify-center gap-10"
         >
-          {trustBadges.map((badge) => (
-            <div
-              key={badge.label}
-              className="flex items-center gap-2 text-text-subtle"
-            >
-              <badge.icon className="h-4 w-4 text-gold/60" />
-              <span className="font-body text-sm">{badge.label}</span>
+          {[
+            { value: "10 000+", label: "photos créées" },
+            { value: "< 30s", label: "par génération" },
+            { value: "100%", label: "IA, 0 studio" },
+          ].map((stat) => (
+            <div key={stat.label} className="text-center">
+              <div className="text-2xl font-heading font-bold text-[#F9CA1F]">{stat.value}</div>
+              <div className="text-xs text-zinc-500 mt-0.5">{stat.label}</div>
             </div>
           ))}
         </motion.div>
       </div>
+
+      {/* Scroll indicator */}
+      <motion.a
+        href="#studio"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 1.2 }}
+        className="absolute bottom-10 flex flex-col items-center gap-2 text-zinc-600 hover:text-[#F9CA1F] transition-colors"
+      >
+        <span className="text-xs tracking-widest uppercase">Essaie</span>
+        <motion.div
+          animate={{ y: [0, 6, 0] }}
+          transition={{ repeat: Infinity, duration: 1.5 }}
+        >
+          <ArrowDown className="w-4 h-4" />
+        </motion.div>
+      </motion.a>
     </section>
   );
 }
