@@ -1,6 +1,5 @@
+import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
-import type { NextRequest } from "next/server";
 
 const protectedPaths = [
   "/dashboard",
@@ -13,9 +12,9 @@ const protectedPaths = [
 
 const adminPaths = ["/admin"];
 
-export async function middleware(req: NextRequest) {
+export default auth((req) => {
   const { pathname } = req.nextUrl;
-  const authSecret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
+  const session = req.auth;
 
   const isProtected = protectedPaths.some(
     (path) => pathname === path || pathname.startsWith(path + "/")
@@ -25,13 +24,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // NextAuth v5 (Auth.js) uses "authjs" as cookie prefix, not "next-auth"
-  const token = await getToken({
-    req,
-    secret: authSecret,
-  });
-
-  if (!token) {
+  if (!session) {
     const loginUrl = new URL("/login", req.nextUrl.origin);
     loginUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(loginUrl);
@@ -41,12 +34,12 @@ export async function middleware(req: NextRequest) {
     (path) => pathname === path || pathname.startsWith(path + "/")
   );
 
-  if (isAdminRoute && token.role !== "ADMIN") {
+  if (isAdminRoute && session.user?.role !== "ADMIN") {
     return NextResponse.redirect(new URL("/dashboard", req.nextUrl.origin));
   }
 
   return NextResponse.next();
-}
+});
 
 export const config = {
   matcher: [
