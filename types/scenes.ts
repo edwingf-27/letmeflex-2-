@@ -12,7 +12,7 @@ export interface SceneCategory {
   scenes: Scene[];
 }
 
-const CAMERA = "Shot on Sony A7R V, 85mm lens, f/1.8, shallow depth of field, cinematic color grading, ultra photorealistic, 8k quality. No watermarks, no text, no logos.";
+const CAMERA = "natural lighting, realistic atmosphere, no filters";
 const NEG = "watermark, text, logo, blurry, low quality, cartoon, illustration, ugly, distorted, amateur, grain, overexposed, deformed face, extra limbs";
 
 export const SCENE_CATEGORIES: SceneCategory[] = [

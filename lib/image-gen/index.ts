@@ -21,7 +21,7 @@ function getPreferredProviderWithoutDb():
   | { provider: "replicate"; modelId: string }
   | { provider: "openai"; modelId: string } {
     if (process.env.FAL_KEY?.trim()) {
-      return { provider: "fal", modelId: "fal-ai/flux-pro/v1.1" };
+      return { provider: "fal", modelId: "fal-ai/flux-realism" };
     }
     if (process.env.OPENAI_API_KEY?.trim()) {
       return { provider: "openai", modelId: "gpt-image-1" };

@@ -45,12 +45,22 @@ export async function generateWithFal(
 ): Promise<MultiGenerationResult> {
   const start = Date.now();
 
+  // fal-ai/flux-realism et fal-ai/flux-pro ont des paramètres légèrement différents
+  const isRealism = modelId.includes("flux-realism");
+
   const result = await fal.subscribe(modelId, {
     input: {
       prompt: req.prompt,
+      negative_prompt: req.negativePrompt,
       image_size: "landscape_16_9",
       num_images: numImages,
-      safety_tolerance: "5",
+      ...(isRealism ? {
+        num_inference_steps: 28,
+        guidance_scale: 3.5,
+        enable_safety_checker: false,
+      } : {
+        safety_tolerance: "5",
+      }),
     },
   }) as any;
 
@@ -90,16 +100,26 @@ export async function generateSingleWithFal(
 export async function generateWithFaceAndPrompt(
   prompt: string,
   faceImageUrl: string,
-  numImages: number = 1
+  numImages: number = 1,
+  negativePrompt?: string
 ): Promise<MultiGenerationResult> {
   const start = Date.now();
+
+  const neg = negativePrompt ||
+    "painting, drawing, cartoon, anime, illustration, CGI, 3D render, " +
+    "plastic skin, airbrushed skin, smooth skin, fake, artificial, " +
+    "deformed face, bad anatomy, extra limbs, watermark, text, logo, " +
+    "blurry, low quality, overprocessed, oversaturated";
 
   const result = await fal.subscribe("fal-ai/pulid", {
     input: {
       prompt,
+      negative_prompt: neg,
       reference_images: [{ image_url: faceImageUrl }],
       num_images: numImages,
       image_size: "landscape_16_9",
+      num_inference_steps: 30,
+      guidance_scale: 4.0,
     },
   }) as any;
 

@@ -151,7 +151,7 @@ export async function POST(req: Request) {
 
         if (facePhotos && facePhotos.length > 0) {
           // Generate directly with prompt + face photo in one step
-          const result = await generateWithFaceAndPrompt(prompt, facePhotos[0], variationCount);
+          const result = await generateWithFaceAndPrompt(prompt, facePhotos[0], variationCount, negativePrompt);
           modelUsed = result.modelUsed;
           modelProvider = result.provider;
           durationMs = result.durationMs;
@@ -431,7 +431,7 @@ export async function POST(req: Request) {
           seeds.push(img.seed);
         }
       } else if (effectiveMode === "face_swap") {
-        const result = await generateWithFaceAndPrompt(prompt, effectiveFaceUrl!, variationCount);
+        const result = await generateWithFaceAndPrompt(prompt, effectiveFaceUrl!, variationCount, negativePrompt);
         modelUsed = result.modelUsed;
         modelProvider = result.provider;
         durationMs = result.durationMs;
