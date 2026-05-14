@@ -37,33 +37,17 @@ function extractImages(data: any): Array<{ url: string; seed?: number }> {
 // ─── Génération standard — flux-pro/v1.1-ultra (meilleure qualité) ────────────
 export async function generateWithFal(
   req: GenerationRequest,
-  modelId: string = "fal-ai/flux-pro/v1.1-ultra",
+  modelId: string = "fal-ai/flux-pro/v1.1",
   numImages: number = 1
 ): Promise<MultiGenerationResult> {
   const start = Date.now();
 
-  const isUltra = modelId.includes("v1.1-ultra");
-  const isRealism = modelId.includes("flux-realism");
-
   const result = await fal.subscribe(modelId, {
     input: {
       prompt: req.prompt,
+      image_size: "landscape_16_9",
       num_images: numImages,
-      ...(isUltra ? {
-        // Ultra : paramètres spécifiques, raw=true pour rendu naturel non-IA
-        aspect_ratio: "16:9",
-        safety_tolerance: "6",
-        raw: true,
-      } : isRealism ? {
-        image_size: "landscape_16_9",
-        num_inference_steps: 28,
-        guidance_scale: 3.5,
-        enable_safety_checker: true,
-      } : {
-        // flux-pro standard
-        image_size: "landscape_16_9",
-        safety_tolerance: "5",
-      }),
+      safety_tolerance: "6",
     },
   }) as any;
 
@@ -87,7 +71,7 @@ export async function generateWithFal(
 
 export async function generateSingleWithFal(
   req: GenerationRequest,
-  modelId: string = "fal-ai/flux-pro/v1.1-ultra"
+  modelId: string = "fal-ai/flux-pro/v1.1"
 ): Promise<GenerationResult> {
   const multi = await generateWithFal(req, modelId, 1);
   return {
@@ -152,13 +136,16 @@ export async function imageToImageWithFal(
 ): Promise<MultiGenerationResult> {
   const start = Date.now();
 
-  const result = await fal.subscribe("fal-ai/flux-pro/v1.1/image-to-image", {
+  // flux/dev/image-to-image : modèle confirmé qui fonctionne
+  const result = await fal.subscribe("fal-ai/flux/dev/image-to-image", {
     input: {
       image_url: imageUrl,
       prompt,
       strength,
+      num_inference_steps: 28,
+      guidance_scale: 3.5,
       num_images: numImages,
-      safety_tolerance: "6",
+      enable_safety_checker: false,
     },
   }) as any;
 
@@ -174,7 +161,7 @@ export async function imageToImageWithFal(
       imageUrl: img.url || "",
       seed: img.seed ?? data.seed ?? undefined,
     })),
-    modelUsed: "fal-ai/flux-pro/v1.1/image-to-image",
+    modelUsed: "fal-ai/flux/dev/image-to-image",
     provider: "fal",
     durationMs: Date.now() - start,
   };
