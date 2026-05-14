@@ -14,11 +14,13 @@ import {
   Coins,
   Menu,
   X,
+  Wand2,
 } from "lucide-react";
 import { useState } from "react";
 
 const navItems = [
   { href: "/dashboard", label: "Studio", icon: Sparkles },
+  { href: "/transform", label: "Transformer", icon: Wand2 },
   { href: "/credits", label: "Abonnement", icon: Crown },
   { href: "/invite", label: "Invite & Gagne", icon: Gift },
   { href: "/monetisation", label: "Monétisation", icon: TrendingUp },
@@ -177,7 +179,7 @@ export default function DashboardLayout({
 
       {/* ── Mobile Bottom Nav ─────────────────────────────── */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#111113] border-t border-[#1E1E22] z-40 flex pb-safe">
-        {[navItems[0], navItems[4], navItems[1], navItems[5]].map((item) => {
+        {[navItems[0], navItems[1], navItems[5], navItems[6]].map((item) => {
           const isActive =
             pathname === item.href ||
             (item.href !== "/dashboard" && pathname.startsWith(item.href));
