@@ -64,10 +64,11 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { imageUrl, mode, extraInstructions } = body as {
+    const { imageUrl, mode, extraInstructions, refImageUrl } = body as {
       imageUrl: string;
       mode: TransformMode;
       extraInstructions?: string;
+      refImageUrl?: string;
     };
 
     if (!imageUrl || !mode || !TRANSFORM_MODES[mode]) {
@@ -109,31 +110,52 @@ export async function POST(req: Request) {
 
     try {
       const start = Date.now();
-
-      const result = await fal.subscribe("fal-ai/flux-pro/v1/image-to-image", {
-        input: {
-          image_url: imageUrl,
-          prompt,
-          strength: config.strength,
-          num_inference_steps: 28,
-          guidance_scale: 4.0,
-          num_images: 1,
-          safety_tolerance: "5",
-        },
-      }) as any;
-
-      const data = result.data || result;
       let outputUrl = "";
 
-      if (Array.isArray(data.images) && data.images.length > 0) {
-        outputUrl = data.images[0].url;
-      } else if (data.image?.url) {
-        outputUrl = data.image.url;
+      // Mode add_person avec photo de référence → PuLID pour reproduire la vraie tête
+      if (mode === "add_person" && refImageUrl) {
+        const neg =
+          "cartoon, anime, CGI, deformed, bad anatomy, plastic skin, blurry, fake, watermark";
+        const refPrompt =
+          `RAW photo, DSLR, photorealistic. ${extraInstructions || "add this person naturally to the scene"}. ` +
+          "Natural skin texture, realistic body, matching scene lighting, seamless integration, 8K UHD.";
+
+        const result = await fal.subscribe("fal-ai/pulid", {
+          input: {
+            prompt: refPrompt,
+            negative_prompt: neg,
+            reference_images: [{ image_url: refImageUrl }],
+            num_images: 1,
+            image_size: "square_hd",
+            num_inference_steps: 30,
+            guidance_scale: 4.0,
+          },
+        }) as any;
+
+        const data = result.data || result;
+        if (Array.isArray(data.images) && data.images.length > 0) outputUrl = data.images[0].url;
+        else if (data.image?.url) outputUrl = data.image.url;
+
+      } else {
+        // Tous les autres modes → flux-pro image-to-image
+        const result = await fal.subscribe("fal-ai/flux-pro/v1/image-to-image", {
+          input: {
+            image_url: imageUrl,
+            prompt,
+            strength: config.strength,
+            num_inference_steps: 28,
+            guidance_scale: 4.0,
+            num_images: 1,
+            safety_tolerance: "5",
+          },
+        }) as any;
+
+        const data = result.data || result;
+        if (Array.isArray(data.images) && data.images.length > 0) outputUrl = data.images[0].url;
+        else if (data.image?.url) outputUrl = data.image.url;
       }
 
-      if (!outputUrl) {
-        throw new Error("FAL returned no image for transform");
-      }
+      if (!outputUrl) throw new Error("FAL returned no image for transform");
 
       const durationMs = Date.now() - start;
 
