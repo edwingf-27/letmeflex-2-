@@ -8,16 +8,16 @@
 // ─── Préfixe RAW photo — trompe le modèle pour qu'il pense "appareil photo" ──
 
 const PHOTO_PREFIX =
-  "RAW photo, DSLR photograph, Canon EOS R5, 50mm f/1.4 lens, ISO 100, " +
-  "natural bokeh, photorealistic, hyperrealistic, ultra-detailed, ";
+  "RAW photo, DSLR photograph, Canon EOS R5, 85mm f/1.4 lens, ISO 200, " +
+  "photorealistic, hyperrealistic, ultra-detailed, cinematic, ";
 
-// ─── Suffixe technique — renforce la texture peau + qualité ──────────────────
+// ─── Suffixe technique — force le rendu naturel non-IA ───────────────────────
 
 const PHOTO_SUFFIX =
   ". Natural skin texture, visible pores, realistic hair strands, " +
   "authentic shadows and highlights, true-to-life colors, " +
-  "8K UHD resolution, HDR, sharp focus, professional color grading. " +
-  "NOT a painting, NOT an illustration, NOT CGI. Real photograph.";
+  "8K UHD, HDR, tack sharp, professional color grading, film grain. " +
+  "NOT digital art, NOT AI generated, NOT CGI, NOT illustration. Real photograph.";
 
 // ─── Instructions face pour PuLID ────────────────────────────────────────────
 

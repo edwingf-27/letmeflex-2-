@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db, generateId } from "@/lib/db";
 import { fal } from "@fal-ai/client";
+import { imageToImageWithFal } from "@/lib/image-gen/providers/fal";
 
 export const maxDuration = 300;
 
@@ -33,18 +34,19 @@ const TRANSFORM_MODES = {
       "mess, clutter, dirty, clothes on floor, cartoon, illustration, CGI, blurry, different room",
   },
   replace_object: {
-    label: "Remplacer un objet",
-    strength: 0.75,
+    label: "Ajouter / Retirer un objet",
+    strength: 0.35,
     buildPrompt: (extra: string) =>
-      `RAW photo, DSLR photograph, photorealistic, hyperrealistic. ${extra}. ` +
-      "Seamless integration, matching lighting and shadows, ultra-detailed, 8K UHD. " +
-      "NOT a painting. Real photograph.",
+      `RAW photo, DSLR photograph, Canon EOS R5, photorealistic, hyperrealistic. ` +
+      `${extra}. ` +
+      "Keep everything else in the photo EXACTLY the same. Only modify the specified object. " +
+      "Seamless integration, perfect lighting match, ultra-detailed, 8K UHD. Real photograph. NOT AI art.",
     negativePrompt:
-      "cartoon, illustration, CGI, 3D render, fake, blurry, low quality, deformed",
+      "cartoon, illustration, CGI, 3D render, fake, blurry, low quality, deformed, changed background",
   },
   add_person: {
     label: "Ajouter une personne",
-    strength: 0.70,
+    strength: 0.40,
     buildPrompt: (extra: string) =>
       `RAW photo, DSLR photograph, photorealistic, hyperrealistic. ${extra}. ` +
       "Natural skin texture, realistic body proportions, matching lighting from the scene, " +
@@ -140,22 +142,9 @@ export async function POST(req: Request) {
         else if (data.image?.url) outputUrl = data.image.url;
 
       } else {
-        // Tous les autres modes → flux/dev/image-to-image (paramètres validés)
-        const result = await fal.subscribe("fal-ai/flux/dev/image-to-image", {
-          input: {
-            image_url: imageUrl,
-            prompt,
-            strength: config.strength,
-            num_inference_steps: 28,
-            guidance_scale: 3.5,
-            num_images: 1,
-            enable_safety_checker: true,
-          },
-        }) as any;
-
-        const data = result.data || result;
-        if (Array.isArray(data.images) && data.images.length > 0) outputUrl = data.images[0].url;
-        else if (data.image?.url) outputUrl = data.image.url;
+        // flux-pro/v1.1/image-to-image — meilleure qualité, préserve l'original
+        const result = await imageToImageWithFal(imageUrl, prompt, config.strength, 1);
+        outputUrl = result.images[0]?.imageUrl || "";
       }
 
       if (!outputUrl) throw new Error("FAL returned no image for transform");
