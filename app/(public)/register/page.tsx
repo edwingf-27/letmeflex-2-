@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, Suspense, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -35,6 +35,40 @@ function RegisterForm() {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [generalError, setGeneralError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [countdown, setCountdown] = useState(3);
+  const [pendingLogin, setPendingLogin] = useState<{ email: string; password: string } | null>(null);
+
+  // Countdown + auto-login une fois le compte créé
+  useEffect(() => {
+    if (!success || !pendingLogin) return;
+
+    if (countdown === 0) {
+      // Lance la connexion automatique
+      const { email: e, password: p } = pendingLogin;
+      fetch("/api/auth/csrf")
+        .then((r) => r.json())
+        .then(({ csrfToken }) => {
+          const form = document.createElement("form");
+          form.method = "POST";
+          form.action = "/api/auth/callback/credentials";
+          const fields: Record<string, string> = { email: e, password: p, csrfToken, callbackUrl: "/dashboard" };
+          for (const [key, value] of Object.entries(fields)) {
+            const input = document.createElement("input");
+            input.type = "hidden";
+            input.name = key;
+            input.value = value;
+            form.appendChild(input);
+          }
+          document.body.appendChild(form);
+          form.submit();
+        });
+      return;
+    }
+
+    const timer = setTimeout(() => setCountdown((c) => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [success, countdown, pendingLogin]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -73,33 +107,9 @@ function RegisterForm() {
         return;
       }
 
-      // Auto sign-in after successful registration
-      // On utilise le form POST + CSRF token (même méthode que /login)
-      // car signIn("credentials", { redirect: false }) de next-auth/react
-      // ne pose pas le cookie de session correctement en v5 beta
-      const csrfRes = await fetch("/api/auth/csrf");
-      const { csrfToken } = await csrfRes.json();
-
-      const form = document.createElement("form");
-      form.method = "POST";
-      form.action = "/api/auth/callback/credentials";
-
-      const fields: Record<string, string> = {
-        email,
-        password,
-        csrfToken,
-        callbackUrl: "/dashboard",
-      };
-      for (const [key, value] of Object.entries(fields)) {
-        const input = document.createElement("input");
-        input.type = "hidden";
-        input.name = key;
-        input.value = value;
-        form.appendChild(input);
-      }
-
-      document.body.appendChild(form);
-      form.submit(); // le navigateur suit le redirect vers /dashboard
+      // Affiche l'écran de succès puis redirige automatiquement
+      setPendingLogin({ email, password });
+      setSuccess(true);
     } catch {
       setGeneralError("Something went wrong. Please try again.");
     } finally {
@@ -114,6 +124,88 @@ function RegisterForm() {
       ? `/dashboard?ref=${referralCode}`
       : "/dashboard";
     await signIn("google", { callbackUrl });
+  }
+
+  // Écran de succès
+  if (success) {
+    return (
+      <div className="min-h-screen bg-[#0C0C0E] flex items-center justify-center px-4">
+        <div className="w-full max-w-md text-center">
+          {/* Cercle animé avec checkmark */}
+          <div className="flex items-center justify-center mb-8">
+            <div className="relative w-28 h-28">
+              {/* Anneau doré animé */}
+              <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 112 112">
+                <circle cx="56" cy="56" r="50" fill="none" stroke="#2A2A2E" strokeWidth="4" />
+                <circle
+                  cx="56" cy="56" r="50"
+                  fill="none"
+                  stroke="#F9CA1F"
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                  strokeDasharray="314"
+                  strokeDashoffset="0"
+                  style={{ animation: "draw-circle 0.8s ease-out forwards" }}
+                />
+              </svg>
+              {/* Checkmark */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <svg className="w-12 h-12 text-[#F9CA1F]" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"
+                  style={{ animation: "pop-in 0.4s 0.7s ease-out both" }}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          {/* Texte */}
+          <h1 className="font-heading text-3xl font-extrabold text-white mb-2">
+            Compte créé ! 🎉
+          </h1>
+          <p className="text-zinc-400 text-base mb-1">
+            Bienvenue sur <span className="text-[#F9CA1F] font-semibold">letmeflex.ai</span>
+          </p>
+          <p className="text-zinc-500 text-sm mb-8">
+            Tu reçois <span className="text-white font-medium">3 crédits offerts</span> pour commencer à flexer
+          </p>
+
+          {/* Barre de progression + countdown */}
+          <div className="bg-[#141416] border border-[#2A2A2E] rounded-2xl p-6">
+            <p className="text-zinc-400 text-sm mb-4">
+              Connexion automatique dans{" "}
+              <span className="text-[#F9CA1F] font-bold text-lg">{countdown}</span>s...
+            </p>
+            <div className="w-full h-1.5 bg-[#2A2A2E] rounded-full overflow-hidden">
+              <div
+                className="h-full bg-[#F9CA1F] rounded-full"
+                style={{
+                  animation: "progress-bar 3s linear forwards",
+                }}
+              />
+            </div>
+            <p className="text-zinc-600 text-xs mt-3">
+              Tu vas être redirigé vers ton studio
+            </p>
+          </div>
+
+          {/* Keyframes */}
+          <style jsx>{`
+            @keyframes draw-circle {
+              from { stroke-dashoffset: 314; }
+              to   { stroke-dashoffset: 0; }
+            }
+            @keyframes pop-in {
+              from { opacity: 0; transform: scale(0.5); }
+              to   { opacity: 1; transform: scale(1); }
+            }
+            @keyframes progress-bar {
+              from { width: 100%; }
+              to   { width: 0%; }
+            }
+          `}</style>
+        </div>
+      </div>
+    );
   }
 
   return (
