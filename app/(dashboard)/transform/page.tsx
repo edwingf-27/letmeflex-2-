@@ -9,11 +9,13 @@ const MODES = [
   {
     id: "replace_object",
     emoji: "🔄",
-    label: "Remplacer un objet",
-    description: "Remplace n'importe quel objet par ce que tu veux",
-    placeholder: "Ex : remplace le volant par celui d'une Porsche GT3...",
+    label: "Ajouter / Retirer un objet",
+    description: "Ajoute ou remplace un objet — uploade une photo de référence pour que l'IA reproduise exactement l'objet",
+    placeholder: "Ex : remplace le volant par celui de la photo de référence, même couleur et finition...",
     showExtra: true,
-    showRef: false,
+    showRef: true,
+    refLabel: "Photo de l'objet à ajouter",
+    refHint: "Upload une photo de l'objet exact que tu veux intégrer",
     color: "#F9CA1F",
     badge: null,
   },
@@ -21,10 +23,12 @@ const MODES = [
     id: "add_person",
     emoji: "👤",
     label: "Ajouter une personne",
-    description: "Ajoute quelqu'un sur ta photo — avec sa vraie tête si tu uploades une référence",
+    description: "Ajoute quelqu'un sur ta photo — uploade une photo de référence pour reproduire sa vraie tête",
     placeholder: "Ex : debout à ma droite, bras croisés, souriant...",
     showExtra: true,
     showRef: true,
+    refLabel: "Photo de la personne à ajouter",
+    refHint: "Upload une photo pour que l'IA reproduise son visage et son style",
     color: "#6C63FF",
     badge: null,
   },
@@ -249,13 +253,13 @@ export default function TransformPage() {
                   preview={refPreview}
                   onFile={handleRefFile}
                   onReset={() => { setRefFile(null); setRefPreview(null); }}
-                  label="Photo de la personne à ajouter"
-                  hint="Upload une photo pour que l'IA reproduise son visage et son style"
+                  label={currentMode.refLabel}
+                  hint={currentMode.refHint}
                   height="h-40"
                 />
                 {refPreview && (
                   <p className="text-xs text-[#6C63FF] flex items-center gap-1">
-                    <span>✓</span> L&apos;IA va reproduire cette personne dans ta photo
+                    <span>✓</span> L&apos;IA va reproduire cet élément dans ta photo
                   </p>
                 )}
               </motion.div>

@@ -112,13 +112,16 @@ export async function POST(req: Request) {
       const start = Date.now();
       let outputUrl = "";
 
-      // Mode add_person avec photo de référence → PuLID pour reproduire la vraie tête
-      if (mode === "add_person" && refImageUrl) {
+      // Mode avec photo de référence (personne ou objet) → PuLID
+      if ((mode === "add_person" || mode === "replace_object") && refImageUrl) {
         const neg =
           "cartoon, anime, CGI, deformed, bad anatomy, plastic skin, blurry, fake, watermark";
-        const refPrompt =
-          `RAW photo, DSLR, photorealistic. ${extraInstructions || "add this person naturally to the scene"}. ` +
-          "Natural skin texture, realistic body, matching scene lighting, seamless integration, 8K UHD.";
+        const isObject = mode === "replace_object";
+        const refPrompt = isObject
+          ? `RAW photo, DSLR, photorealistic. ${extraInstructions || "integrate the reference object seamlessly into the scene"}. ` +
+            "Exact same object as in the reference image, matching lighting and shadows, seamless integration, ultra-detailed, 8K UHD. Real photograph."
+          : `RAW photo, DSLR, photorealistic. ${extraInstructions || "add this person naturally to the scene"}. ` +
+            "Natural skin texture, realistic body, matching scene lighting, seamless integration, 8K UHD.";
 
         const result = await fal.subscribe("fal-ai/pulid", {
           input: {
