@@ -4,20 +4,28 @@ import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { db, generateId } from "@/lib/db";
 
+// Sur Vercel, VERCEL_URL est toujours l'URL réelle du déploiement.
+// On la priorise pour éviter que NEXTAUTH_URL=http://localhost:3000
+// (défini en local ou par erreur dans les env Vercel) redirige vers localhost.
 const inferredAppUrl =
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
   process.env.NEXTAUTH_URL ||
-  process.env.AUTH_URL ||
-  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined);
-const resolvedSecret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
-const isHttpsApp = inferredAppUrl?.startsWith("https://") ?? process.env.NODE_ENV === "production";
+  process.env.AUTH_URL;
 
+const resolvedSecret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
+const isHttpsApp =
+  !!process.env.VERCEL_URL ||
+  inferredAppUrl?.startsWith("https://") ||
+  process.env.NODE_ENV === "production";
+
+// Synchronise les deux variables pour NextAuth
 if (inferredAppUrl) {
-  process.env.NEXTAUTH_URL = process.env.NEXTAUTH_URL || inferredAppUrl;
-  process.env.AUTH_URL = process.env.AUTH_URL || inferredAppUrl;
+  process.env.NEXTAUTH_URL = inferredAppUrl;
+  process.env.AUTH_URL = inferredAppUrl;
 }
 if (resolvedSecret) {
-  process.env.NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET || resolvedSecret;
-  process.env.AUTH_SECRET = process.env.AUTH_SECRET || resolvedSecret;
+  process.env.NEXTAUTH_SECRET = resolvedSecret;
+  process.env.AUTH_SECRET = resolvedSecret;
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
