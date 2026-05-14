@@ -35,7 +35,7 @@ const TRANSFORM_MODES = {
   },
   replace_object: {
     label: "Ajouter / Retirer un objet",
-    strength: 0.35,
+    strength: 0.60,
     buildPrompt: (extra: string) =>
       `RAW photo, DSLR photograph, Canon EOS R5, photorealistic, hyperrealistic. ` +
       `${extra}. ` +
