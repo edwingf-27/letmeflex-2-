@@ -24,6 +24,8 @@ export async function POST(req: Request) {
 
     const { name, email, password, referralCode } = parsed.data;
 
+    console.log("[REGISTER][1] start", { email, hasPassword: !!password });
+
     // Check if email already exists
     const { data: existing } = await db
       .from("User")
@@ -40,6 +42,10 @@ export async function POST(req: Request) {
 
     // Hash password
     const passwordHash = await bcrypt.hash(password, 12);
+    console.log("[REGISTER][2] passwordHash created", {
+      hashPrefix: passwordHash.substring(0, 7), // affiche "$2b$12$" sans exposer le hash
+      hashLength: passwordHash.length,           // doit être 60
+    });
 
     // Find referrer if referral code provided
     let referrer: { id: string; email: string; credits: number } | null = null;
@@ -55,8 +61,10 @@ export async function POST(req: Request) {
     const userId = generateId();
     const referralCodeNew = generateId();
     const initialCredits = referrer ? 5 : 3;
+    const now = new Date().toISOString();
 
     // Create user
+    console.log("[REGISTER][3] inserting user into DB", { userId, email });
     const { data: newUser, error: createError } = await db
       .from("User")
       .insert({
@@ -69,17 +77,44 @@ export async function POST(req: Request) {
         referredById: referrer?.id || null,
         role: "USER",
         plan: "FREE",
-        updatedAt: new Date().toISOString(),
+        createdAt: now,
+        updatedAt: now,
       })
       .select("id, name, email, credits, plan")
       .single();
 
     if (createError) {
-      console.error("[REGISTER_DB_ERROR]", createError.message);
+      console.error("[REGISTER][3] DB insert FAILED", {
+        error: createError.message,
+        code: createError.code,
+        details: createError.details,
+        hint: createError.hint,
+      });
       return NextResponse.json(
         { error: "Failed to create account: " + createError.message },
         { status: 500 }
       );
+    }
+
+    console.log("[REGISTER][3] DB insert OK", { userId: newUser?.id });
+
+    // Re-query to verify passwordHash was actually saved
+    const { data: savedUser, error: verifyError } = await db
+      .from("User")
+      .select("id, email, passwordHash")
+      .eq("id", userId)
+      .single();
+
+    if (verifyError || !savedUser) {
+      console.error("[REGISTER][4] verify re-query FAILED", verifyError?.message);
+    } else {
+      console.log("[REGISTER][4] passwordHash in DB", {
+        userId: savedUser.id,
+        passwordHashSaved: !!savedUser.passwordHash,
+        hashPrefix: savedUser.passwordHash?.substring(0, 7) ?? "NULL",
+        hashLength: savedUser.passwordHash?.length ?? 0,
+        // si hashPrefix !== "$2b$12" le hash est corrompu ou le mauvais champ
+      });
     }
 
     // Log signup bonus credits
@@ -122,6 +157,10 @@ export async function POST(req: Request) {
       } catch {}
     }
 
+    console.log("[REGISTER][5] registration complete — user can now log in", {
+      userId: newUser?.id,
+      email: newUser?.email,
+    });
     return NextResponse.json({ user: newUser });
   } catch (error: any) {
     console.error("[REGISTER_ERROR]", error?.message || error);
