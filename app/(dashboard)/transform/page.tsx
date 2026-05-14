@@ -7,28 +7,6 @@ import { Upload, Wand2, Download, RotateCcw, Sparkles, UserPlus } from "lucide-r
 
 const MODES = [
   {
-    id: "messy_room",
-    emoji: "💥",
-    label: "Mettre en bordel",
-    description: "Ta pièce propre devient un chaos ultra réaliste — parfait pour pranker",
-    placeholder: "",
-    showExtra: false,
-    showRef: false,
-    color: "#FF6B6B",
-    badge: "VIRAL",
-  },
-  {
-    id: "clean_room",
-    emoji: "🧹",
-    label: "Nettoyer une pièce",
-    description: "Ta chambre en bordel devient propre et rangée instantanément",
-    placeholder: "",
-    showExtra: false,
-    showRef: false,
-    color: "#43D9AD",
-    badge: null,
-  },
-  {
     id: "replace_object",
     emoji: "🔄",
     label: "Remplacer un objet",
@@ -107,7 +85,7 @@ function UploadZone({
 export default function TransformPage() {
   const { data: session, update } = useSession();
 
-  const [selectedMode, setSelectedMode] = useState<ModeId>("messy_room");
+  const [selectedMode, setSelectedMode] = useState<ModeId>("replace_object");
   const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [sourcePreview, setSourcePreview] = useState<string | null>(null);
   const [refFile, setRefFile] = useState<File | null>(null);
@@ -207,7 +185,7 @@ export default function TransformPage() {
       </div>
 
       {/* Mode selector */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
         {MODES.map((mode) => (
           <button
             key={mode.id}
