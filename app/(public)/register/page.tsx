@@ -74,19 +74,32 @@ function RegisterForm() {
       }
 
       // Auto sign-in after successful registration
-      const signInRes = await signIn("credentials", {
+      // On utilise le form POST + CSRF token (même méthode que /login)
+      // car signIn("credentials", { redirect: false }) de next-auth/react
+      // ne pose pas le cookie de session correctement en v5 beta
+      const csrfRes = await fetch("/api/auth/csrf");
+      const { csrfToken } = await csrfRes.json();
+
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = "/api/auth/callback/credentials";
+
+      const fields: Record<string, string> = {
         email,
         password,
-        redirect: false,
-      });
-
-      if (signInRes?.error) {
-        // Registration succeeded but auto-login failed, redirect to login
-        router.push("/login");
-      } else {
-        router.push("/dashboard");
-        router.refresh();
+        csrfToken,
+        callbackUrl: "/dashboard",
+      };
+      for (const [key, value] of Object.entries(fields)) {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = key;
+        input.value = value;
+        form.appendChild(input);
       }
+
+      document.body.appendChild(form);
+      form.submit(); // le navigateur suit le redirect vers /dashboard
     } catch {
       setGeneralError("Something went wrong. Please try again.");
     } finally {
