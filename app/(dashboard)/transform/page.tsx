@@ -7,22 +7,34 @@ import { Upload, Wand2, Download, RotateCcw, Sparkles } from "lucide-react";
 
 const MODES = [
   {
+    id: "messy_room",
+    emoji: "💥",
+    label: "Mettre en bordel",
+    description: "Ta pièce propre devient un vrai chaos ultra réaliste — parfait pour pranker tes parents",
+    placeholder: "",
+    showExtra: false,
+    color: "#FF6B6B",
+    badge: "VIRAL",
+  },
+  {
     id: "clean_room",
     emoji: "🧹",
     label: "Nettoyer une pièce",
-    description: "Ta chambre en bordel devient propre et rangée",
+    description: "Ta chambre en bordel devient propre et rangée instantanément",
     placeholder: "",
     showExtra: false,
     color: "#43D9AD",
+    badge: null,
   },
   {
     id: "replace_object",
     emoji: "🔄",
     label: "Remplacer un objet",
-    description: "Remplace n'importe quoi par ce que tu veux",
+    description: "Remplace n'importe quel objet par ce que tu veux",
     placeholder: "Ex : remplace le volant par celui d'une Porsche GT3...",
     showExtra: true,
     color: "#F9CA1F",
+    badge: null,
   },
   {
     id: "add_person",
@@ -32,6 +44,7 @@ const MODES = [
     placeholder: "Ex : une belle femme en robe rouge debout à ma droite...",
     showExtra: true,
     color: "#6C63FF",
+    badge: null,
   },
 ] as const;
 
@@ -39,7 +52,7 @@ type ModeId = typeof MODES[number]["id"];
 
 export default function TransformPage() {
   const { data: session, update } = useSession();
-  const [selectedMode, setSelectedMode] = useState<ModeId>("clean_room");
+  const [selectedMode, setSelectedMode] = useState<ModeId>("messy_room");
   const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [sourcePreview, setSourcePreview] = useState<string | null>(null);
   const [extraInstructions, setExtraInstructions] = useState("");
@@ -146,17 +159,22 @@ export default function TransformPage() {
       </div>
 
       {/* Mode selector */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         {MODES.map((mode) => (
           <button
             key={mode.id}
             onClick={() => { setSelectedMode(mode.id); setError(""); setResultUrl(null); }}
-            className={`p-4 rounded-2xl border text-left transition-all ${
+            className={`relative p-4 rounded-2xl border text-left transition-all ${
               selectedMode === mode.id
                 ? "border-[#F9CA1F]/40 bg-[#F9CA1F]/5"
                 : "border-[#2A2A2E] bg-[#111113] hover:border-[#3A3A3E]"
             }`}
           >
+            {mode.badge && (
+              <span className="absolute top-2 right-2 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#FF6B6B]/20 text-[#FF6B6B] border border-[#FF6B6B]/30">
+                {mode.badge}
+              </span>
+            )}
             <div className="text-2xl mb-2">{mode.emoji}</div>
             <p className={`font-semibold text-sm mb-1 ${selectedMode === mode.id ? "text-[#F9CA1F]" : "text-white"}`}>
               {mode.label}

@@ -9,16 +9,28 @@ const falKey = process.env.FAL_KEY?.trim();
 if (falKey) fal.config({ credentials: falKey });
 
 const TRANSFORM_MODES = {
+  messy_room: {
+    label: "Mettre en bordel",
+    strength: 0.70,
+    buildPrompt: (_extra: string) =>
+      "RAW photo, DSLR photograph, Canon EOS R5, same room but extremely messy and cluttered, " +
+      "clothes piled everywhere on the floor and sofa, empty bottles on the table, " +
+      "shoes scattered around, bags dropped on the floor, blankets crumpled, " +
+      "plates and cups left out, general chaos and disorder, ultra photorealistic, 8K UHD. " +
+      "Keep the exact same room, same furniture, same layout. Real photograph.",
+    negativePrompt:
+      "clean, tidy, organized, cartoon, illustration, CGI, blurry, different room",
+  },
   clean_room: {
     label: "Nettoyer une pièce",
     strength: 0.65,
     buildPrompt: (_extra: string) =>
-      "RAW photo, DSLR photograph, perfectly clean and organized room, " +
-      "tidy, minimalist, everything in place, no clutter, no mess, " +
-      "spotless floors, neatly arranged furniture, photorealistic, 8K UHD. " +
-      "NOT a painting. Real photograph.",
+      "RAW photo, DSLR photograph, Canon EOS R5, same room but perfectly clean and organized, " +
+      "everything in its place, spotless floors, neatly arranged cushions, " +
+      "clear tables, no clutter, no items on the floor, pristine and tidy, " +
+      "ultra photorealistic, 8K UHD. Keep the exact same room, same furniture, same layout. Real photograph.",
     negativePrompt:
-      "mess, clutter, dirty, untidy, cartoon, illustration, CGI, blurry",
+      "mess, clutter, dirty, clothes on floor, cartoon, illustration, CGI, blurry, different room",
   },
   replace_object: {
     label: "Remplacer un objet",
@@ -98,15 +110,15 @@ export async function POST(req: Request) {
     try {
       const start = Date.now();
 
-      const result = await fal.subscribe("fal-ai/flux/dev/image-to-image", {
+      const result = await fal.subscribe("fal-ai/flux-pro/v1/image-to-image", {
         input: {
           image_url: imageUrl,
           prompt,
           strength: config.strength,
           num_inference_steps: 28,
-          guidance_scale: 3.5,
+          guidance_scale: 4.0,
           num_images: 1,
-          enable_safety_checker: true,
+          safety_tolerance: "5",
         },
       }) as any;
 
