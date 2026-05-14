@@ -9,6 +9,11 @@ import { uploadGeneratedImages } from "@/lib/supabase";
 import { sendLowCreditsEmail } from "@/lib/resend";
 import { CATEGORIES } from "@/types/categories";
 import { ALL_SCENES, DEFAULT_NEGATIVE_PROMPT } from "@/types/scenes";
+import {
+  enhancePrompt,
+  logPromptEnhancement,
+  ENHANCED_NEGATIVE_PROMPT,
+} from "@/lib/image-gen/prompt-enhancer";
 
 export const maxDuration = 300;
 
@@ -85,12 +90,15 @@ export async function POST(req: Request) {
         );
       }
 
-      // Build prompt from scene + extra instructions
-      let prompt = scene.prompt;
+      // Build prompt from scene + extra instructions, puis amélioration automatique
+      const hasFace = !!(facePhotos && facePhotos.length > 0);
+      let rawPrompt = scene.prompt;
       if (extraInstructions) {
-        prompt = `${prompt} ${extraInstructions}`;
+        rawPrompt = `${rawPrompt} ${extraInstructions}`;
       }
-      const negativePrompt = DEFAULT_NEGATIVE_PROMPT;
+      const prompt = enhancePrompt(rawPrompt, { hasFace, isSceneBased: true });
+      logPromptEnhancement(rawPrompt, prompt, { hasFace, isSceneBased: true });
+      const negativePrompt = ENHANCED_NEGATIVE_PROMPT;
 
       const generationId = generateId();
 
@@ -342,10 +350,16 @@ export async function POST(req: Request) {
       shot,
     };
 
-    const { prompt, negativePrompt } =
+    const { prompt: rawPrompt, negativePrompt: _rawNeg } =
       effectiveMode === "background_swap"
         ? buildBackgroundPrompt(category, promptOptions)
         : buildPrompt(category, promptOptions);
+
+    // Amélioration automatique du prompt
+    const hasFaceLegacy = effectiveMode === "face_swap";
+    const prompt = enhancePrompt(rawPrompt, { hasFace: hasFaceLegacy, isSceneBased: true });
+    logPromptEnhancement(rawPrompt, prompt, { hasFace: hasFaceLegacy, isSceneBased: true });
+    const negativePrompt = ENHANCED_NEGATIVE_PROMPT;
 
     const generationId = generateId();
 

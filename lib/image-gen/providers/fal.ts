@@ -50,7 +50,7 @@ export async function generateWithFal(
       prompt: req.prompt,
       image_size: "landscape_16_9",
       num_images: numImages,
-      safety_tolerance: 5,
+      safety_tolerance: "5",
     },
   }) as any;
 
@@ -135,7 +135,7 @@ export async function backgroundSwapWithFal(
       prompt: backgroundPrompt,
       image_size: "landscape_16_9",
       num_images: numImages,
-      safety_tolerance: 5,
+      safety_tolerance: "5",
     },
   }) as any;
 
