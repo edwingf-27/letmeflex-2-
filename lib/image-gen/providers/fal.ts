@@ -45,19 +45,22 @@ export async function generateWithFal(
 ): Promise<MultiGenerationResult> {
   const start = Date.now();
 
-  // fal-ai/flux-realism et fal-ai/flux-pro ont des paramètres légèrement différents
-  const isRealism = modelId.includes("flux-realism");
+  // FLUX (flux-realism, flux-pro) ne supporte pas negative_prompt
+  // La qualité passe par le prompt positif uniquement
+  const isFluxRealism = modelId.includes("flux-realism");
+  const isFluxPro = modelId.includes("flux-pro");
 
   const result = await fal.subscribe(modelId, {
     input: {
       prompt: req.prompt,
-      negative_prompt: req.negativePrompt,
       image_size: "landscape_16_9",
       num_images: numImages,
-      ...(isRealism ? {
+      ...(isFluxRealism ? {
         num_inference_steps: 28,
         guidance_scale: 3.5,
-        enable_safety_checker: false,
+        enable_safety_checker: true,
+      } : isFluxPro ? {
+        safety_tolerance: "5",
       } : {
         safety_tolerance: "5",
       }),
