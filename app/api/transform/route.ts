@@ -12,12 +12,13 @@ if (falKey) fal.config({ credentials: falKey });
 type TransformMode = "replace_person" | "add_person";
 
 // ─── Face swap helper ──────────────────────────────────────────────────────────
-// Swaps the face in targetImageUrl with the face from refImageUrl
-async function faceSwap(targetImageUrl: string, refImageUrl: string): Promise<string> {
+// base_image_url : the scene image where the face will be placed INTO
+// swap_image_url : the reference image the face comes FROM
+async function faceSwap(baseImageUrl: string, swapImageUrl: string): Promise<string> {
   const result = await fal.subscribe("fal-ai/face-swap", {
     input: {
-      image0: { image_url: targetImageUrl },
-      image1: { image_url: refImageUrl },
+      base_image_url: baseImageUrl,
+      swap_image_url: swapImageUrl,
     },
   }) as any;
 
