@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db, generateId } from "@/lib/db";
 import { fal } from "@fal-ai/client";
-import { imageToImageWithFal } from "@/lib/image-gen/providers/fal";
 
 export const maxDuration = 300;
 
@@ -10,23 +9,6 @@ const falKey = process.env.FAL_KEY?.trim();
 if (falKey) fal.config({ credentials: falKey });
 
 type TransformMode = "replace_person" | "add_person";
-
-// ─── Face swap helper ──────────────────────────────────────────────────────────
-// base_image_url : the scene image where the face will be placed INTO
-// swap_image_url : the reference image the face comes FROM
-async function faceSwap(baseImageUrl: string, swapImageUrl: string): Promise<string> {
-  const result = await fal.subscribe("fal-ai/face-swap", {
-    input: {
-      base_image_url: baseImageUrl,
-      swap_image_url: swapImageUrl,
-    },
-  }) as any;
-
-  const data = result.data || result;
-  const url = data.image?.url || data.images?.[0]?.url;
-  if (!url) throw new Error("face-swap returned no image");
-  return url;
-}
 
 export async function POST(req: Request) {
   try {
@@ -45,6 +27,9 @@ export async function POST(req: Request) {
 
     if (!imageUrl || !mode) {
       return NextResponse.json({ error: "imageUrl and mode are required" }, { status: 400 });
+    }
+    if (!refImageUrl) {
+      return NextResponse.json({ error: "A reference photo is required." }, { status: 400 });
     }
 
     const CREDIT_COST = 1;
@@ -77,54 +62,55 @@ export async function POST(req: Request) {
 
     try {
       const start = Date.now();
-      let outputUrl = "";
+
+      // ── OmniGen — multi-image composition ────────────────────────────────────
+      // <image1> = source photo (the user's scene)
+      // <image2> = reference photo (the person to add/replace)
+      //
+      // OmniGen understands natural language + multiple images:
+      // it can insert a full-body person from image2 into the scene of image1
+      // without deforming the original photo.
+
+      let prompt: string;
 
       if (mode === "replace_person") {
-        // ── Replace an existing person next to you ────────────────────────────
-        // If a reference photo is provided → face swap directly on source photo
-        // If no reference → use image-to-image with the text prompt
-        if (refImageUrl) {
-          outputUrl = await faceSwap(imageUrl, refImageUrl);
-        } else {
-          const prompt =
-            `RAW photo, DSLR photograph, Canon EOS R5, photorealistic. ` +
-            `${extraInstructions || "replace the person next to the main subject with someone else"}. ` +
-            "Natural skin texture, matching lighting, seamless integration, 8K UHD. Real photograph.";
-          const r = await imageToImageWithFal(imageUrl, prompt, 0.72, 1);
-          outputUrl = r.images[0]?.imageUrl || "";
-        }
-
-      } else if (mode === "add_person") {
-        // ── Add a new person next to you ─────────────────────────────────────
-        // Step 1: image-to-image to physically add a person into the scene
-        const addPrompt =
-          `RAW photo, DSLR photograph, Canon EOS R5, photorealistic, hyperrealistic. ` +
-          `${extraInstructions || "add a person naturally standing next to the main subject, same lighting, realistic body"}. ` +
-          "Keep the original background and main subject exactly the same. " +
-          "Natural skin texture, realistic proportions, seamless integration, 8K UHD. Real photograph.";
-
-        const step1 = await imageToImageWithFal(imageUrl, addPrompt, 0.78, 1);
-        const step1Url = step1.images[0]?.imageUrl || "";
-        if (!step1Url) throw new Error("Image-to-image step failed");
-
-        // Step 2: if a reference face is provided, swap the new person's face
-        if (refImageUrl) {
-          try {
-            outputUrl = await faceSwap(step1Url, refImageUrl);
-          } catch (faceSwapErr: any) {
-            console.warn("[TRANSFORM] face-swap step failed, returning step1:", faceSwapErr.message);
-            // Fall back to step1 result without face swap
-            outputUrl = step1Url;
-          }
-        } else {
-          outputUrl = step1Url;
-        }
+        prompt =
+          `The person in <image1> is a photo. ` +
+          `Replace the person standing next to the main subject in <image1> ` +
+          `with the person from <image2>, full body, realistic. ` +
+          `${extraInstructions ? extraInstructions + ". " : ""}` +
+          `Keep the main subject, background, lighting and all other details from <image1> exactly the same. ` +
+          `The result must look like a real photograph, ultra-detailed, photorealistic.`;
+      } else {
+        prompt =
+          `The person in <image1> is a photo. ` +
+          `Add the person from <image2> standing naturally next to the main subject in <image1>, full body. ` +
+          `${extraInstructions ? extraInstructions + ". " : ""}` +
+          `Keep the original background, main subject and all details from <image1> exactly the same. ` +
+          `The added person should blend naturally with matching lighting and shadows. ` +
+          `The result must look like a real photograph, ultra-detailed, photorealistic.`;
       }
 
-      if (!outputUrl) throw new Error("Transform produced no image");
+      const result = await fal.subscribe("fal-ai/omnigen-v1", {
+        input: {
+          prompt,
+          input_images: [imageUrl, refImageUrl],
+          guidance_scale: 3.0,
+          img_guidance_scale: 1.8,
+          num_inference_steps: 50,
+        },
+      }) as any;
+
+      const data = result.data || result;
+      const outputUrl =
+        data.images?.[0]?.url ||
+        data.image?.url ||
+        "";
+
+      if (!outputUrl) throw new Error("OmniGen returned no image");
 
       const durationMs = Date.now() - start;
-      console.log(`[TRANSFORM] mode=${mode} duration=${durationMs}ms hasRef=${!!refImageUrl}`);
+      console.log(`[TRANSFORM] mode=${mode} model=omnigen-v1 duration=${durationMs}ms`);
 
       return NextResponse.json({
         id: transformId,
@@ -141,7 +127,7 @@ export async function POST(req: Request) {
       await db.from("User").update({ credits: user.credits }).eq("id", user.id);
       console.error("[TRANSFORM_ERROR]", err?.message || err);
       return NextResponse.json(
-        { error: `Transformation failed: ${err?.message || "unknown error"}. Credits refunded.` },
+        { error: `Transform failed: ${err?.message || "unknown error"}. Credits refunded.` },
         { status: 500 }
       );
     }
