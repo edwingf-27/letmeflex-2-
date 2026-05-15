@@ -141,7 +141,7 @@ export default function TransformPage() {
 
     try {
       const uploads: Promise<string>[] = [uploadFile(sourceFile)];
-      if (refFile && selectedMode === "add_person") uploads.push(uploadFile(refFile));
+      if (refFile) uploads.push(uploadFile(refFile));
       const [imageUrl, refImageUrl] = await Promise.all(uploads);
 
       const res = await fetch("/api/transform", {

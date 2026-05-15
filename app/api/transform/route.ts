@@ -1,58 +1,28 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db, generateId } from "@/lib/db";
-import { fal } from "@fal-ai/client";
 import { imageToImageWithFal } from "@/lib/image-gen/providers/fal";
 
 export const maxDuration = 300;
 
-const falKey = process.env.FAL_KEY?.trim();
-if (falKey) fal.config({ credentials: falKey });
-
 const TRANSFORM_MODES = {
-  messy_room: {
-    label: "Mettre en bordel",
-    strength: 0.70,
-    buildPrompt: (_extra: string) =>
-      "RAW photo, DSLR photograph, Canon EOS R5, same room but extremely messy and cluttered, " +
-      "clothes piled everywhere on the floor and sofa, empty bottles on the table, " +
-      "shoes scattered around, bags dropped on the floor, blankets crumpled, " +
-      "plates and cups left out, general chaos and disorder, ultra photorealistic, 8K UHD. " +
-      "Keep the exact same room, same furniture, same layout. Real photograph.",
-    negativePrompt:
-      "clean, tidy, organized, cartoon, illustration, CGI, blurry, different room",
-  },
-  clean_room: {
-    label: "Nettoyer une pièce",
-    strength: 0.65,
-    buildPrompt: (_extra: string) =>
-      "RAW photo, DSLR photograph, Canon EOS R5, same room but perfectly clean and organized, " +
-      "everything in its place, spotless floors, neatly arranged cushions, " +
-      "clear tables, no clutter, no items on the floor, pristine and tidy, " +
-      "ultra photorealistic, 8K UHD. Keep the exact same room, same furniture, same layout. Real photograph.",
-    negativePrompt:
-      "mess, clutter, dirty, clothes on floor, cartoon, illustration, CGI, blurry, different room",
-  },
   replace_object: {
-    label: "Ajouter / Retirer un objet",
-    strength: 0.60,
+    strength: 0.65,
     buildPrompt: (extra: string) =>
       `RAW photo, DSLR photograph, Canon EOS R5, photorealistic, hyperrealistic. ` +
-      `${extra}. ` +
-      "Keep everything else in the photo EXACTLY the same. Only modify the specified object. " +
+      `${extra || "replace the specified object seamlessly"}. ` +
+      "Keep everything else in the photo EXACTLY the same — same background, same people, same lighting. " +
+      "Only modify the specified object or area. " +
       "Seamless integration, perfect lighting match, ultra-detailed, 8K UHD. Real photograph. NOT AI art.",
-    negativePrompt:
-      "cartoon, illustration, CGI, 3D render, fake, blurry, low quality, deformed, changed background",
   },
   add_person: {
-    label: "Ajouter une personne",
-    strength: 0.40,
+    strength: 0.78,
     buildPrompt: (extra: string) =>
-      `RAW photo, DSLR photograph, photorealistic, hyperrealistic. ${extra}. ` +
-      "Natural skin texture, realistic body proportions, matching lighting from the scene, " +
-      "seamless integration, ultra-detailed, 8K UHD. NOT a painting. Real photograph.",
-    negativePrompt:
-      "cartoon, anime, illustration, CGI, deformed body, bad anatomy, blurry, fake skin",
+      `RAW photo, DSLR photograph, Canon EOS R5, photorealistic, hyperrealistic. ` +
+      `${extra || "add a person naturally next to the main subject"}. ` +
+      "Natural skin texture, realistic body proportions, matching lighting and shadows from the existing scene, " +
+      "seamless integration with the background, ultra-detailed, 8K UHD. " +
+      "Keep the original background and main subject intact. Real photograph. NOT a painting.",
   },
 } as const;
 
@@ -77,7 +47,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "imageUrl and mode are required" }, { status: 400 });
     }
 
-    // Coût : 1 crédit
     const CREDIT_COST = 1;
 
     const { data: user } = await db
@@ -95,9 +64,18 @@ export async function POST(req: Request) {
     }
 
     const config = TRANSFORM_MODES[mode];
-    const prompt = config.buildPrompt(extraInstructions || "");
 
-    // Déduire le crédit
+    // Build a richer prompt when a reference image is provided
+    let promptInput = extraInstructions || "";
+    if (refImageUrl && !extraInstructions) {
+      promptInput = mode === "replace_object"
+        ? "replace the specified object with the one shown in the reference image"
+        : "add the person from the reference image naturally next to the main subject";
+    }
+
+    const prompt = config.buildPrompt(promptInput);
+
+    // Deduct credit
     const newCredits = user.credits - CREDIT_COST;
     await db.from("User").update({ credits: newCredits }).eq("id", user.id);
 
@@ -112,44 +90,17 @@ export async function POST(req: Request) {
 
     try {
       const start = Date.now();
-      let outputUrl = "";
 
-      // Mode avec photo de référence (personne ou objet) → PuLID
-      if ((mode === "add_person" || mode === "replace_object") && refImageUrl) {
-        const neg =
-          "cartoon, anime, CGI, deformed, bad anatomy, plastic skin, blurry, fake, watermark";
-        const isObject = mode === "replace_object";
-        const refPrompt = isObject
-          ? `RAW photo, DSLR, photorealistic. ${extraInstructions || "integrate the reference object seamlessly into the scene"}. ` +
-            "Exact same object as in the reference image, matching lighting and shadows, seamless integration, ultra-detailed, 8K UHD. Real photograph."
-          : `RAW photo, DSLR, photorealistic. ${extraInstructions || "add this person naturally to the scene"}. ` +
-            "Natural skin texture, realistic body, matching scene lighting, seamless integration, 8K UHD.";
-
-        const result = await fal.subscribe("fal-ai/pulid", {
-          input: {
-            prompt: refPrompt,
-            negative_prompt: neg,
-            reference_images: [{ image_url: refImageUrl }],
-            num_images: 1,
-            image_size: "square_hd",
-            num_inference_steps: 30,
-            guidance_scale: 4.0,
-          },
-        }) as any;
-
-        const data = result.data || result;
-        if (Array.isArray(data.images) && data.images.length > 0) outputUrl = data.images[0].url;
-        else if (data.image?.url) outputUrl = data.image.url;
-
-      } else {
-        // flux-pro/v1.1/image-to-image — meilleure qualité, préserve l'original
-        const result = await imageToImageWithFal(imageUrl, prompt, config.strength, 1);
-        outputUrl = result.images[0]?.imageUrl || "";
-      }
+      // Always use image-to-image on the SOURCE photo so the original scene is preserved
+      // refImageUrl is used as additional context in the prompt (direct conditioning
+      // requires IP-Adapter which we keep as a future upgrade)
+      const result = await imageToImageWithFal(imageUrl, prompt, config.strength, 1);
+      const outputUrl = result.images[0]?.imageUrl || "";
 
       if (!outputUrl) throw new Error("FAL returned no image for transform");
 
       const durationMs = Date.now() - start;
+      console.log(`[TRANSFORM] mode=${mode} strength=${config.strength} duration=${durationMs}ms`);
 
       return NextResponse.json({
         id: transformId,
@@ -161,16 +112,16 @@ export async function POST(req: Request) {
         durationMs,
       });
     } catch (err: any) {
-      // Rembourser si erreur
+      // Refund credit on error
       await db.from("User").update({ credits: user.credits }).eq("id", user.id);
-      console.error("[TRANSFORM_ERROR]", err.message);
+      console.error("[TRANSFORM_ERROR]", err?.message || err);
       return NextResponse.json(
         { error: "Transformation failed. Credits refunded." },
         { status: 500 }
       );
     }
   } catch (err: any) {
-    console.error("[TRANSFORM_ROUTE_ERROR]", err.message);
+    console.error("[TRANSFORM_ROUTE_ERROR]", err?.message || err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
