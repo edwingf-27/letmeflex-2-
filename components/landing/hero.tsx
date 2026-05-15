@@ -53,7 +53,7 @@ export function Hero() {
         {/* Main title */}
         <motion.div custom={1} variants={fadeUp} initial="hidden" animate="visible">
           <h1 className="font-heading font-extrabold leading-none tracking-tight text-white"
-              style={{ fontSize: "clamp(3.5rem, 12vw, 9rem)" }}>
+              style={{ fontSize: "clamp(2.8rem, 12vw, 9rem)" }}>
             letmeflex
             <span className="text-[#F9CA1F]">.ai</span>
           </h1>
@@ -75,7 +75,7 @@ export function Hero() {
         {/* Sous-tagline */}
         <motion.p
           custom={3} variants={fadeUp} initial="hidden" animate="visible"
-          className="mt-4 max-w-xl text-lg text-zinc-400 md:text-xl leading-relaxed"
+          className="mt-4 max-w-xl text-base text-zinc-400 md:text-xl leading-relaxed px-2"
         >
           Génère des photos lifestyle luxe avec ton visage.
           Supercars, jets privés, villas, montres — en quelques secondes.
@@ -84,17 +84,17 @@ export function Hero() {
         {/* CTAs */}
         <motion.div
           custom={4} variants={fadeUp} initial="hidden" animate="visible"
-          className="mt-10 flex flex-col sm:flex-row items-center gap-4"
+          className="mt-8 flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto px-4 sm:px-0"
         >
           <Link
             href="/register"
-            className="px-8 py-3.5 rounded-2xl bg-[#F9CA1F] text-black font-heading font-bold text-base hover:bg-[#F9CA1F]/90 transition-all active:scale-95"
+            className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-[#F9CA1F] text-black font-heading font-bold text-base hover:bg-[#F9CA1F]/90 transition-all active:scale-95 text-center"
           >
             Commencer gratuitement
           </Link>
           <a
             href="#studio"
-            className="px-8 py-3.5 rounded-2xl border border-[#2A2A2E] text-zinc-300 text-base hover:border-[#F9CA1F]/30 hover:text-white transition-all"
+            className="w-full sm:w-auto px-8 py-4 rounded-2xl border border-[#2A2A2E] text-zinc-300 text-base hover:border-[#F9CA1F]/30 hover:text-white transition-all text-center"
           >
             Voir comment ça marche
           </a>

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Syne, Montserrat, Playfair_Display } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
@@ -23,6 +23,14 @@ const playfair = Playfair_Display({
   variable: "--font-playfair",
   display: "swap",
 });
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: "#0C0C0E",
+};
 
 export const metadata: Metadata = {
   title: "letmeflex.ai — Flex Without Limits",

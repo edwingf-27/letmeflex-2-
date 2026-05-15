@@ -174,7 +174,7 @@ export default function DashboardLayout({
 
       {/* ── Main ─────────────────────────────────────────── */}
       <main className="flex-1 lg:ml-60 min-h-screen">
-        <div className="pt-14 lg:pt-0 p-4 lg:p-8">{children}</div>
+        <div className="pt-14 lg:pt-0 p-4 lg:p-8 pb-24 lg:pb-8">{children}</div>
       </main>
 
       {/* ── Mobile Bottom Nav ─────────────────────────────── */}

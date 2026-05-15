@@ -9,13 +9,13 @@ const MODES = [
   {
     id: "replace_object",
     emoji: "🔄",
-    label: "Ajouter / Retirer un objet",
-    description: "Ajoute ou remplace un objet — uploade une photo de référence pour que l'IA reproduise exactement l'objet",
-    placeholder: "Ex : remplace le volant par celui de la photo de référence, même couleur et finition...",
+    label: "Remplacer un objet",
+    description: "Ajoute ou remplace un objet avec photo de référence",
+    placeholder: "Ex : remplace le volant par celui de la photo de référence...",
     showExtra: true,
     showRef: true,
     refLabel: "Photo de l'objet à ajouter",
-    refHint: "Upload une photo de l'objet exact que tu veux intégrer",
+    refHint: "Photo de l'objet exact à intégrer",
     color: "#F9CA1F",
     badge: null,
   },
@@ -23,12 +23,12 @@ const MODES = [
     id: "add_person",
     emoji: "👤",
     label: "Ajouter une personne",
-    description: "Ajoute quelqu'un sur ta photo — uploade une photo de référence pour reproduire sa vraie tête",
-    placeholder: "Ex : debout à ma droite, bras croisés, souriant...",
+    description: "Ajoute quelqu'un avec sa vraie tête via photo de référence",
+    placeholder: "Ex : debout à ma droite, bras croisés...",
     showExtra: true,
     showRef: true,
-    refLabel: "Photo de la personne à ajouter",
-    refHint: "Upload une photo pour que l'IA reproduise son visage et son style",
+    refLabel: "Photo de la personne",
+    refHint: "L'IA reproduit son visage et son style",
     color: "#6C63FF",
     badge: null,
   },
@@ -79,7 +79,8 @@ function UploadZone({
     >
       <Upload className="w-6 h-6 text-zinc-600 mb-2" />
       <p className="text-sm text-zinc-400 font-medium">{label}</p>
-      {hint && <p className="text-xs text-zinc-600 mt-0.5 text-center px-4">{hint}</p>}
+      {hint && <p className="text-xs text-zinc-600 mt-0.5 text-center px-4 hidden sm:block">{hint}</p>}
+      <p className="text-xs text-zinc-700 mt-1 sm:hidden">Appuie pour choisir</p>
       <input ref={ref} type="file" accept="image/*" className="hidden"
         onChange={(e) => { if (e.target.files?.[0]) onFile(e.target.files[0]); }} />
     </div>

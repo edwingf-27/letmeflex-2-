@@ -65,12 +65,8 @@ export default function DashboardPage() {
 
   /* ── Upload handlers ─────────────────────────────────────────── */
   const uploadFile = useCallback(async (file: File) => {
-    if (!file.type.match(/image\/(jpeg|png|webp)/)) {
-      toast.error("Format accepté : JPG, PNG ou WEBP");
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("Taille max : 10 MB");
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("Taille max : 20 MB");
       return;
     }
 
@@ -251,7 +247,7 @@ export default function DashboardPage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            accept="image/*"
             className="hidden"
             onChange={handleFileChange}
           />
@@ -306,7 +302,7 @@ export default function DashboardPage() {
                   Dépose ta photo ici
                 </p>
                 <p className="text-zinc-500 text-xs mt-1">
-                  ou clique pour parcourir · JPG, PNG, WEBP · max 10MB
+                  Appuie pour choisir ou prendre une photo
                 </p>
               </div>
               <span className="text-xs text-zinc-600 mt-1">
