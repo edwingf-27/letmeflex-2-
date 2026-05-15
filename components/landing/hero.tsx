@@ -15,7 +15,7 @@ const fadeUp = {
 
 export function Hero() {
   return (
-    <section className="relative flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-[#0C0C0E] px-4">
+    <section className="relative flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-[#0C0C0E] px-4 max-w-[100vw]">
 
       {/* Grid background */}
       <div
@@ -52,8 +52,7 @@ export function Hero() {
 
         {/* Main title */}
         <motion.div custom={1} variants={fadeUp} initial="hidden" animate="visible">
-          <h1 className="font-heading font-extrabold leading-none tracking-tight text-white"
-              style={{ fontSize: "clamp(2.8rem, 12vw, 9rem)" }}>
+          <h1 className="font-heading font-extrabold leading-none tracking-tight text-white text-5xl sm:text-7xl md:text-8xl lg:text-[9rem]">
             letmeflex
             <span className="text-[#F9CA1F]">.ai</span>
           </h1>
@@ -62,7 +61,7 @@ export function Hero() {
         {/* Accroche */}
         <motion.p
           custom={2} variants={fadeUp} initial="hidden" animate="visible"
-          className="mt-4 font-heading font-bold text-2xl md:text-3xl tracking-tight"
+          className="mt-4 font-heading font-bold text-xl sm:text-2xl md:text-3xl tracking-tight"
           style={{
             background: "linear-gradient(90deg, #F9CA1F 0%, #fff 60%)",
             WebkitBackgroundClip: "text",
@@ -75,7 +74,7 @@ export function Hero() {
         {/* Sous-tagline */}
         <motion.p
           custom={3} variants={fadeUp} initial="hidden" animate="visible"
-          className="mt-4 max-w-xl text-base text-zinc-400 md:text-xl leading-relaxed px-2"
+          className="mt-4 max-w-xl text-sm text-zinc-400 sm:text-base md:text-xl leading-relaxed text-center px-2"
         >
           Génère des photos lifestyle luxe avec ton visage.
           Supercars, jets privés, villas, montres — en quelques secondes.
@@ -103,7 +102,7 @@ export function Hero() {
         {/* Stats */}
         <motion.div
           custom={5} variants={fadeUp} initial="hidden" animate="visible"
-          className="mt-16 flex flex-wrap items-center justify-center gap-10"
+          className="mt-10 flex flex-wrap items-center justify-center gap-6 sm:gap-10 w-full"
         >
           {[
             { value: "10 000+", label: "photos créées" },

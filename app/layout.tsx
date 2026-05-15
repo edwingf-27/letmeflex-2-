@@ -55,7 +55,7 @@ export default function RootLayout({
       lang="en"
       className={`${syne.variable} ${montserrat.variable} ${playfair.variable}`}
     >
-      <body className="bg-bg text-text-primary font-body antialiased">
+      <body className="bg-bg text-text-primary font-body antialiased overflow-x-hidden">
         <SessionProvider>
           <QueryProvider>
             {children}
