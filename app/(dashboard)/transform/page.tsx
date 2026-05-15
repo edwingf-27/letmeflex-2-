@@ -4,37 +4,7 @@ import { useState, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Upload, Wand2, Download, RotateCcw, Sparkles, UserPlus } from "lucide-react";
-
-const MODES = [
-  {
-    id: "replace_object",
-    emoji: "🔄",
-    label: "Remplacer un objet",
-    description: "Ajoute ou remplace un objet avec photo de référence",
-    placeholder: "Ex : remplace le volant par celui de la photo de référence...",
-    showExtra: true,
-    showRef: true,
-    refLabel: "Photo de l'objet à ajouter",
-    refHint: "Photo de l'objet exact à intégrer",
-    color: "#F9CA1F",
-    badge: null,
-  },
-  {
-    id: "add_person",
-    emoji: "👤",
-    label: "Ajouter une personne",
-    description: "Ajoute quelqu'un avec sa vraie tête via photo de référence",
-    placeholder: "Ex : debout à ma droite, bras croisés...",
-    showExtra: true,
-    showRef: true,
-    refLabel: "Photo de la personne",
-    refHint: "L'IA reproduit son visage et son style",
-    color: "#6C63FF",
-    badge: null,
-  },
-] as const;
-
-type ModeId = typeof MODES[number]["id"];
+import { useLanguage } from "@/lib/i18n/context";
 
 function UploadZone({
   preview,
@@ -80,7 +50,7 @@ function UploadZone({
       <Upload className="w-6 h-6 text-zinc-600 mb-2" />
       <p className="text-sm text-zinc-400 font-medium">{label}</p>
       {hint && <p className="text-xs text-zinc-600 mt-0.5 text-center px-4 hidden sm:block">{hint}</p>}
-      <p className="text-xs text-zinc-700 mt-1 sm:hidden">Appuie pour choisir</p>
+      <p className="text-xs text-zinc-700 mt-1 sm:hidden">Tap to choose</p>
       <input ref={ref} type="file" accept="image/*" className="hidden"
         onChange={(e) => { if (e.target.files?.[0]) onFile(e.target.files[0]); }} />
     </div>
@@ -89,6 +59,36 @@ function UploadZone({
 
 export default function TransformPage() {
   const { data: session, update } = useSession();
+  const { t } = useLanguage();
+
+  type ModeId = "replace_object" | "add_person";
+
+  const MODES = [
+    {
+      id: "replace_object" as ModeId,
+      emoji: "🔄",
+      label: t("transform_mode_replace_label"),
+      description: t("transform_mode_replace_desc"),
+      placeholder: t("transform_mode_replace_placeholder"),
+      showExtra: true,
+      showRef: true,
+      refLabel: t("transform_mode_replace_reflabel"),
+      refHint: t("transform_mode_replace_refhint"),
+      color: "#F9CA1F",
+    },
+    {
+      id: "add_person" as ModeId,
+      emoji: "👤",
+      label: t("transform_mode_person_label"),
+      description: t("transform_mode_person_desc"),
+      placeholder: t("transform_mode_person_placeholder"),
+      showExtra: true,
+      showRef: true,
+      refLabel: t("transform_mode_person_reflabel"),
+      refHint: t("transform_mode_person_refhint"),
+      color: "#6C63FF",
+    },
+  ];
 
   const [selectedMode, setSelectedMode] = useState<ModeId>("replace_object");
   const [sourceFile, setSourceFile] = useState<File | null>(null);
@@ -128,19 +128,18 @@ export default function TransformPage() {
     const formData = new FormData();
     formData.append("file", file);
     const res = await fetch("/api/upload/source-image", { method: "POST", body: formData });
-    if (!res.ok) throw new Error("Échec de l'upload");
+    if (!res.ok) throw new Error("Upload failed");
     const { url } = await res.json();
     return url;
   }
 
   async function handleTransform() {
     if (!sourceFile) return;
-    if (credits < 1) { setError("Tu n'as plus de crédits."); return; }
+    if (credits < 1) { setError(t("transform_no_credits")); return; }
 
     setLoading(true); setError(""); setResultUrl(null);
 
     try {
-      // Upload image(s) en parallèle
       const uploads: Promise<string>[] = [uploadFile(sourceFile)];
       if (refFile && selectedMode === "add_person") uploads.push(uploadFile(refFile));
       const [imageUrl, refImageUrl] = await Promise.all(uploads);
@@ -157,12 +156,12 @@ export default function TransformPage() {
       });
 
       const data = await res.json();
-      if (!res.ok) { setError(data.error || "Erreur lors de la transformation"); return; }
+      if (!res.ok) { setError(data.error || "Error during transformation"); return; }
 
       setResultUrl(data.imageUrl);
       await update();
     } catch (err: any) {
-      setError(err.message || "Une erreur est survenue");
+      setError(err.message || "An error occurred");
     } finally {
       setLoading(false);
     }
@@ -182,10 +181,10 @@ export default function TransformPage() {
       <div className="mb-8">
         <h1 className="font-heading text-2xl font-bold text-white flex items-center gap-2">
           <Wand2 className="w-6 h-6 text-[#F9CA1F]" />
-          Transformer une photo
+          {t("transform_title")}
         </h1>
         <p className="text-zinc-500 text-sm mt-1">
-          Modifie une de tes photos existantes avec l&apos;IA — 1 crédit par transformation
+          {t("transform_subtitle")}
         </p>
       </div>
 
@@ -201,11 +200,6 @@ export default function TransformPage() {
                 : "border-[#2A2A2E] bg-[#111113] hover:border-[#3A3A3E]"
             }`}
           >
-            {mode.badge && (
-              <span className="absolute top-2 right-2 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#FF6B6B]/20 text-[#FF6B6B] border border-[#FF6B6B]/30">
-                {mode.badge}
-              </span>
-            )}
             <div className="text-2xl mb-2">{mode.emoji}</div>
             <p className={`font-semibold text-sm mb-1 ${selectedMode === mode.id ? "text-[#F9CA1F]" : "text-white"}`}>
               {mode.label}
@@ -221,18 +215,18 @@ export default function TransformPage() {
 
           {/* Photo principale */}
           <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest">
-            1. Ta photo originale
+            {t("transform_source_label")}
           </h2>
           <UploadZone
             preview={sourcePreview}
             onFile={handleSourceFile}
             onReset={reset}
-            label="Glisse ta photo ici"
-            hint="ou clique pour choisir"
+            label={t("transform_drop_label")}
+            hint={t("transform_drop_hint")}
             height="h-56"
           />
 
-          {/* Photo de référence (mode add_person uniquement) */}
+          {/* Photo de référence */}
           <AnimatePresence>
             {currentMode.showRef && (
               <motion.div
@@ -244,9 +238,9 @@ export default function TransformPage() {
                 <div className="flex items-center gap-2">
                   <UserPlus className="w-4 h-4 text-[#6C63FF]" />
                   <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest">
-                    2. Photo de référence
+                    {t("transform_ref_label_section")}
                     <span className="ml-2 text-xs text-zinc-600 normal-case font-normal tracking-normal">
-                      (optionnel)
+                      {t("transform_optional")}
                     </span>
                   </h2>
                 </div>
@@ -260,7 +254,7 @@ export default function TransformPage() {
                 />
                 {refPreview && (
                   <p className="text-xs text-[#6C63FF] flex items-center gap-1">
-                    <span>✓</span> L&apos;IA va reproduire cet élément dans ta photo
+                    {t("transform_ai_notice")}
                   </p>
                 )}
               </motion.div>
@@ -277,9 +271,9 @@ export default function TransformPage() {
               >
                 <div className="flex items-center justify-between mb-2">
                   <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest">
-                    {currentMode.showRef ? "3." : "2."} Instructions
+                    {currentMode.showRef ? t("transform_instructions_label_3") : t("transform_instructions_label")}
                     <span className="ml-2 text-xs text-zinc-600 normal-case font-normal tracking-normal">
-                      (optionnel)
+                      {t("transform_optional")}
                     </span>
                   </h2>
                 </div>
@@ -306,12 +300,12 @@ export default function TransformPage() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                 </svg>
-                Transformation en cours...
+                {t("transform_btn_loading")}
               </>
             ) : (
               <>
                 <Sparkles className="w-4 h-4" />
-                Transformer — 1 crédit
+                {t("transform_btn")}
               </>
             )}
           </button>
@@ -322,33 +316,33 @@ export default function TransformPage() {
         {/* Right — Result */}
         <div className="space-y-4">
           <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest">
-            Résultat
+            {t("transform_result_label")}
           </h2>
 
           <div className="relative rounded-2xl overflow-hidden h-72 bg-[#111113] border border-[#1E1E22] flex items-center justify-center">
             {loading ? (
               <div className="flex flex-col items-center gap-3">
                 <div className="w-10 h-10 rounded-full border-2 border-[#F9CA1F]/20 border-t-[#F9CA1F] animate-spin" />
-                <p className="text-zinc-500 text-sm">L&apos;IA transforme ta photo...</p>
-                <p className="text-zinc-600 text-xs">~20-40 secondes</p>
+                <p className="text-zinc-500 text-sm">{t("transform_loading_text")}</p>
+                <p className="text-zinc-600 text-xs">{t("transform_loading_time")}</p>
               </div>
             ) : resultUrl ? (
               <>
-                <img src={resultUrl} alt="Résultat" className="w-full h-full object-cover" />
+                <img src={resultUrl} alt="Result" className="w-full h-full object-cover" />
                 <div className="absolute bottom-3 right-3">
                   <button
                     onClick={handleDownload}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-black/70 hover:bg-black/90 text-white text-xs font-medium transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    Télécharger
+                    {t("transform_download")}
                   </button>
                 </div>
               </>
             ) : (
               <div className="flex flex-col items-center gap-3 text-center px-8">
                 <div className="text-4xl">✨</div>
-                <p className="text-zinc-500 text-sm">Le résultat apparaîtra ici</p>
+                <p className="text-zinc-500 text-sm">{t("transform_result_empty")}</p>
               </div>
             )}
           </div>
@@ -359,12 +353,12 @@ export default function TransformPage() {
               animate={{ opacity: 1, y: 0 }}
               className="p-4 rounded-xl bg-[#43D9AD]/10 border border-[#43D9AD]/20 text-center"
             >
-              <p className="text-[#43D9AD] text-sm font-medium">Transformation réussie ✅</p>
+              <p className="text-[#43D9AD] text-sm font-medium">{t("transform_success")}</p>
               <button
                 onClick={reset}
                 className="mt-3 px-4 py-2 rounded-xl border border-[#2A2A2E] text-zinc-400 text-xs hover:text-white hover:border-zinc-500 transition-all"
               >
-                Nouvelle transformation
+                {t("transform_new")}
               </button>
             </motion.div>
           )}

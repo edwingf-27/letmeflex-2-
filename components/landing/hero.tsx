@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowDown, Sparkles } from "lucide-react";
+import { useLanguage } from "@/lib/i18n/context";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 40 },
@@ -14,6 +15,8 @@ const fadeUp = {
 };
 
 export function Hero() {
+  const { t } = useLanguage();
+
   return (
     <section className="relative flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-[#0C0C0E] px-4 max-w-[100vw]">
 
@@ -44,9 +47,9 @@ export function Hero() {
           custom={0} variants={fadeUp} initial="hidden" animate="visible"
           className="mb-8 inline-flex items-center gap-2 rounded-full border border-[#F9CA1F]/20 bg-[#F9CA1F]/5 px-3 py-1.5 max-w-[90vw]"
         >
-          <Sparkles className="h-3.5 w-3.5 text-[#F9CA1F]" />
+          <Sparkles className="h-3.5 w-3.5 text-[#F9CA1F] flex-shrink-0" />
           <span className="text-[10px] sm:text-xs font-medium tracking-wide text-[#F9CA1F] whitespace-nowrap">
-            Génération d'images IA · Lifestyle luxe
+            {t("hero_badge")}
           </span>
         </motion.div>
 
@@ -68,7 +71,7 @@ export function Hero() {
             WebkitTextFillColor: "transparent",
           }}
         >
-          Flex Without Limits.
+          {t("hero_tagline")}
         </motion.p>
 
         {/* Sous-tagline */}
@@ -76,8 +79,7 @@ export function Hero() {
           custom={3} variants={fadeUp} initial="hidden" animate="visible"
           className="mt-4 max-w-xl text-sm text-zinc-400 sm:text-base md:text-xl leading-relaxed text-center px-2"
         >
-          Génère des photos lifestyle luxe avec ton visage.
-          Supercars, jets privés, villas, montres — en quelques secondes.
+          {t("hero_subtitle")}
         </motion.p>
 
         {/* CTAs */}
@@ -89,13 +91,13 @@ export function Hero() {
             href="/register"
             className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-[#F9CA1F] text-black font-heading font-bold text-base hover:bg-[#F9CA1F]/90 transition-all active:scale-95 text-center"
           >
-            Commencer gratuitement
+            {t("hero_cta_start")}
           </Link>
           <a
             href="#studio"
             className="w-full sm:w-auto px-8 py-4 rounded-2xl border border-[#2A2A2E] text-zinc-300 text-base hover:border-[#F9CA1F]/30 hover:text-white transition-all text-center"
           >
-            Voir comment ça marche
+            {t("hero_cta_how")}
           </a>
         </motion.div>
 
@@ -105,13 +107,13 @@ export function Hero() {
           className="mt-10 flex flex-wrap items-center justify-center gap-6 sm:gap-10 w-full"
         >
           {[
-            { value: "10 000+", label: "photos créées" },
-            { value: "< 30s", label: "par génération" },
-            { value: "100%", label: "IA, 0 studio" },
+            { value: "10 000+", labelKey: "hero_stat_photos" as const },
+            { value: "< 30s", labelKey: "hero_stat_speed" as const },
+            { value: "100%", labelKey: "hero_stat_ai" as const },
           ].map((stat) => (
-            <div key={stat.label} className="text-center">
+            <div key={stat.labelKey} className="text-center">
               <div className="text-2xl font-heading font-bold text-[#F9CA1F]">{stat.value}</div>
-              <div className="text-xs text-zinc-500 mt-0.5">{stat.label}</div>
+              <div className="text-xs text-zinc-500 mt-0.5">{t(stat.labelKey)}</div>
             </div>
           ))}
         </motion.div>
@@ -125,7 +127,7 @@ export function Hero() {
         transition={{ delay: 1.2 }}
         className="absolute bottom-10 flex flex-col items-center gap-2 text-zinc-600 hover:text-[#F9CA1F] transition-colors"
       >
-        <span className="text-xs tracking-widest uppercase">Essaie</span>
+        <span className="text-xs tracking-widest uppercase">{t("hero_scroll")}</span>
         <motion.div
           animate={{ y: [0, 6, 0] }}
           transition={{ repeat: Infinity, duration: 1.5 }}

@@ -4,11 +4,12 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CATEGORIES } from "@/types/categories";
 import { cn } from "@/lib/utils";
-import { Sparkles, Download, ImageIcon } from "lucide-react";
+import { Sparkles, Download } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
+import { useLanguage } from "@/lib/i18n/context";
 
 interface Generation {
   id: string;
@@ -19,16 +20,17 @@ interface Generation {
   faceSwap: boolean;
 }
 
-const categoryFilterOptions = [
-  { key: "all", label: "All" },
-  ...Object.entries(CATEGORIES).map(([key, cat]) => ({
-    key,
-    label: cat.label,
-  })),
-];
-
 export default function GalleryPage() {
+  const { t } = useLanguage();
   const [activeFilter, setActiveFilter] = useState("all");
+
+  const categoryFilterOptions = [
+    { key: "all", label: t("gallery_filter_all") },
+    ...Object.entries(CATEGORIES).map(([key, cat]) => ({
+      key,
+      label: cat.label,
+    })),
+  ];
 
   const { data: generations = [], isLoading } = useQuery<Generation[]>({
     queryKey: ["gallery-generations"],
@@ -58,7 +60,7 @@ export default function GalleryPage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch {
-      toast.error("Failed to download image.");
+      toast.error(t("gallery_download_error"));
     }
   };
 
@@ -67,10 +69,10 @@ export default function GalleryPage() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-heading font-bold">
-          My <span className="text-gold">Gallery</span>
+          {t("gallery_title")} <span className="text-gold">{t("gallery_title_colored")}</span>
         </h1>
         <p className="text-text-muted mt-1 text-sm">
-          All your generated images in one place.
+          {t("gallery_subtitle")}
         </p>
       </div>
 
@@ -112,21 +114,17 @@ export default function GalleryPage() {
             <Sparkles className="w-8 h-8 text-gold" />
           </div>
           <h3 className="font-heading font-semibold text-lg">
-            {activeFilter === "all"
-              ? "No generations yet"
-              : "No images in this category"}
+            {activeFilter === "all" ? t("gallery_empty_all") : t("gallery_empty_cat")}
           </h3>
           <p className="text-sm text-text-muted mt-2 max-w-sm">
-            {activeFilter === "all"
-              ? "Create your first flex and it will appear here."
-              : "Try generating something in this category."}
+            {activeFilter === "all" ? t("gallery_empty_all_sub") : t("gallery_empty_cat_sub")}
           </p>
           <Link
             href="/generate"
             className="mt-6 inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gold text-black font-heading font-bold text-sm hover:bg-gold-dark transition-colors"
           >
             <Sparkles className="w-4 h-4" />
-            Generate your first flex
+            {t("gallery_generate_btn")}
           </Link>
         </div>
       )}
@@ -151,17 +149,13 @@ export default function GalleryPage() {
                   className="w-full h-auto object-cover"
                   unoptimized
                 />
-
-                {/* Hover Overlay */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-3">
                   <div className="flex items-center justify-between">
                     <span className="px-2.5 py-1 rounded-full bg-white/10 backdrop-blur-sm text-xs font-medium capitalize">
                       {CATEGORIES[gen.category]?.label || gen.category}
                     </span>
                     <button
-                      onClick={() =>
-                        handleDownload(gen.imageUrl, gen.category)
-                      }
+                      onClick={() => handleDownload(gen.imageUrl, gen.category)}
                       className="p-2 rounded-full bg-white/10 backdrop-blur-sm hover:bg-white/20 transition-colors"
                     >
                       <Download className="w-4 h-4" />

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/lib/i18n/context";
 import {
   Sparkles,
   Crown,
@@ -18,16 +19,6 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
-const navItems = [
-  { href: "/dashboard", label: "Studio", icon: Sparkles },
-  { href: "/transform", label: "Transformer", icon: Wand2 },
-  { href: "/credits", label: "Abonnement", icon: Crown },
-  { href: "/invite", label: "Invite & Gagne", icon: Gift },
-  { href: "/monetisation", label: "Monétisation", icon: TrendingUp },
-  { href: "/gallery", label: "Historique", icon: Clock },
-  { href: "/settings", label: "Paramètres", icon: Settings },
-];
-
 export default function DashboardLayout({
   children,
 }: {
@@ -35,11 +26,22 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const { t } = useLanguage();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const user = session?.user;
   const credits = user?.credits ?? 0;
   const plan = user?.plan ?? "FREE";
+
+  const navItems = [
+    { href: "/dashboard", label: t("nav_studio"), icon: Sparkles },
+    { href: "/transform", label: t("nav_transform"), icon: Wand2 },
+    { href: "/credits", label: t("nav_credits"), icon: Crown },
+    { href: "/invite", label: t("nav_invite"), icon: Gift },
+    { href: "/monetisation", label: t("nav_monetisation"), icon: TrendingUp },
+    { href: "/gallery", label: t("nav_gallery"), icon: Clock },
+    { href: "/settings", label: t("nav_settings"), icon: Settings },
+  ];
 
   return (
     <div className="min-h-screen bg-[#0C0C0E] flex">
@@ -86,7 +88,7 @@ export default function DashboardLayout({
           <div className="flex items-center gap-2 mb-1">
             <Coins className="w-3.5 h-3.5 text-[#F9CA1F]" />
             <span className="text-xs text-zinc-500 uppercase tracking-wider font-medium">
-              Crédits
+              {t("nav_credits_label")}
             </span>
           </div>
           <p className="text-2xl font-heading font-bold text-[#F9CA1F]">
@@ -103,7 +105,7 @@ export default function DashboardLayout({
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-white truncate">
-                {user?.name || "Utilisateur"}
+                {user?.name || t("nav_user_fallback")}
               </p>
               <p className="text-xs text-zinc-500 truncate">{user?.email}</p>
             </div>

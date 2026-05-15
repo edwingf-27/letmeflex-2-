@@ -5,17 +5,19 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Upload, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/lib/i18n/context";
 
 const INSPIRATIONS = [
   { id: "supercar", label: "Supercar", icon: "🚗" },
-  { id: "luxe",     label: "Luxe",     icon: "💎" },
+  { id: "luxe",     label: "Luxury",   icon: "💎" },
   { id: "sport",    label: "Sport",    icon: "🏋️" },
-  { id: "voyage",   label: "Voyage",   icon: "✈️" },
+  { id: "voyage",   label: "Travel",   icon: "✈️" },
   { id: "night",    label: "Night",    icon: "🌙" },
 ];
 
 export function StudioDemo() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [selected, setSelected] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [hasPhoto, setHasPhoto] = useState(false);
@@ -37,10 +39,10 @@ export function StudioDemo() {
           className="text-center mb-12"
         >
           <h2 className="font-heading text-3xl md:text-4xl font-bold text-white">
-            Crée ta photo maintenant
+            {t("demo_title")}
           </h2>
           <p className="mt-3 text-zinc-500 text-sm">
-            Essaie le studio — clique sur Générer pour créer ton compte gratuitement
+            {t("demo_subtitle")}
           </p>
         </motion.div>
 
@@ -59,7 +61,7 @@ export function StudioDemo() {
                 <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
                   <span className="text-green-400 text-sm">✓</span>
                 </div>
-                <span className="text-sm text-zinc-300">Photo ajoutée</span>
+                <span className="text-sm text-zinc-300">{t("demo_photo_added")}</span>
               </div>
               <button
                 onClick={() => setHasPhoto(false)}
@@ -77,8 +79,8 @@ export function StudioDemo() {
                 <Upload className="w-5 h-5 text-[#F9CA1F]" />
               </div>
               <div className="text-center">
-                <p className="text-sm text-zinc-300 font-medium">Ajoute ta photo</p>
-                <p className="text-xs text-zinc-600 mt-0.5">Pour te mettre en scène · Optionnel</p>
+                <p className="text-sm text-zinc-300 font-medium">{t("demo_add_photo")}</p>
+                <p className="text-xs text-zinc-600 mt-0.5">{t("demo_add_photo_hint")}</p>
               </div>
             </button>
           )}
@@ -87,14 +89,14 @@ export function StudioDemo() {
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Ex : devant une Ferrari rouge à Monaco, lumière cinématique dorée…"
+            placeholder={t("demo_placeholder")}
             rows={2}
             className="w-full rounded-xl border border-[#2A2A2E] bg-[#0C0C0E] px-4 py-3 text-sm text-white placeholder:text-zinc-600 resize-none focus:outline-none focus:border-[#F9CA1F]/40 transition-colors"
           />
 
           {/* Inspirations */}
           <div className="space-y-2">
-            <p className="text-xs text-zinc-600 uppercase tracking-wider font-medium">Inspirations</p>
+            <p className="text-xs text-zinc-600 uppercase tracking-wider font-medium">{t("demo_inspirations")}</p>
             <div className="flex gap-2 flex-wrap">
               {INSPIRATIONS.map((insp) => (
                 <button
@@ -120,11 +122,11 @@ export function StudioDemo() {
             className="w-full py-4 rounded-2xl bg-[#F9CA1F] text-black font-heading font-bold text-base flex items-center justify-center gap-2.5 hover:bg-[#F9CA1F]/90 active:scale-[0.98] transition-all"
           >
             <Sparkles className="w-5 h-5" />
-            Générer ma photo
+            {t("demo_generate_btn")}
           </button>
 
           <p className="text-center text-xs text-zinc-600">
-            Gratuit · 3 crédits offerts à l'inscription · Aucune carte requise
+            {t("demo_free_note")}
           </p>
         </motion.div>
       </div>

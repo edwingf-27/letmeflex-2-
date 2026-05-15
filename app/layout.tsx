@@ -5,6 +5,7 @@ import "./globals.css";
 import { Toaster } from "react-hot-toast";
 import { QueryProvider } from "@/components/ui/query-provider";
 import { SessionProvider } from "next-auth/react";
+import { LanguageProvider } from "@/lib/i18n/context";
 
 const syne = Syne({
   subsets: ["latin"],
@@ -57,6 +58,7 @@ export default function RootLayout({
     >
       <body className="bg-bg text-text-primary font-body antialiased overflow-x-hidden">
         <SessionProvider>
+          <LanguageProvider>
           <QueryProvider>
             {children}
             <Toaster
@@ -85,6 +87,7 @@ export default function RootLayout({
               }}
             />
           </QueryProvider>
+          </LanguageProvider>
         </SessionProvider>
         <Script
           id="crisp-chat"

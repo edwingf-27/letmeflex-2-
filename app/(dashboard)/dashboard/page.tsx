@@ -7,6 +7,7 @@ import toast from "react-hot-toast";
 import { Upload, X, Sparkles, Download, RotateCcw, Coins } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { useLanguage } from "@/lib/i18n/context";
 
 /* ─── Inspirations ──────────────────────────────────────────────── */
 const INSPIRATIONS = [
@@ -15,36 +16,43 @@ const INSPIRATIONS = [
     label: "Supercar",
     icon: "🚗",
     sceneId: "ferrari-rain",
-    hint: "devant une Ferrari rouge sous la pluie, éclairage cinématique",
+    hint: "in front of a red Ferrari in the rain, cinematic lighting",
+    hintFr: "devant une Ferrari rouge sous la pluie, éclairage cinématique",
   },
   {
     id: "luxe",
-    label: "Luxe",
+    label: "Luxury",
+    labelFr: "Luxe",
     icon: "💎",
     sceneId: "mansion-pool",
-    hint: "au bord d'une piscine infinity dans une villa de luxe",
+    hint: "by an infinity pool at a luxury villa",
+    hintFr: "au bord d'une piscine infinity dans une villa de luxe",
   },
   {
     id: "sport",
     label: "Sport",
     icon: "🏋️",
     sceneId: "gym-mirror",
-    hint: "dans une salle de sport premium, mirror selfie",
+    hint: "in a premium gym, mirror selfie",
+    hintFr: "dans une salle de sport premium, mirror selfie",
   },
   {
     id: "voyage",
-    label: "Voyage",
+    label: "Travel",
+    labelFr: "Voyage",
     icon: "✈️",
     sceneId: "private-jet",
-    hint: "dans un jet privé, champagne, nuages par le hublot",
+    hint: "on a private jet, champagne, clouds through the window",
+    hintFr: "dans un jet privé, champagne, nuages par le hublot",
   },
 ];
 
 /* ─── Page ───────────────────────────────────────────────────────── */
 export default function DashboardPage() {
   const { data: session, update: updateSession } = useSession();
+  const { t, lang } = useLanguage();
   const user = session?.user;
-  const firstName = user?.name?.split(" ")[0] || "toi";
+  const firstName = user?.name?.split(" ")[0] || (lang === "fr" ? "toi" : "you");
   const credits = user?.credits ?? 0;
 
   /* upload */
@@ -66,7 +74,7 @@ export default function DashboardPage() {
   /* ── Upload handlers ─────────────────────────────────────────── */
   const uploadFile = useCallback(async (file: File) => {
     if (file.size > 20 * 1024 * 1024) {
-      toast.error("Taille max : 20 MB");
+      toast.error(t("dash_max_size"));
       return;
     }
 
@@ -85,12 +93,12 @@ export default function DashboardPage() {
       if (!res.ok) throw new Error(data.error || "Upload failed");
       setUploadedUrl(data.url);
     } catch (e: any) {
-      toast.error("Erreur upload : " + e.message);
+      toast.error(t("dash_upload_error") + e.message);
       setPreview(null);
     } finally {
       setUploading(false);
     }
-  }, []);
+  }, [t]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -119,7 +127,7 @@ export default function DashboardPage() {
       setSelectedInspiration(null);
     } else {
       setSelectedInspiration(insp.id);
-      if (!prompt) setPrompt(insp.hint);
+      if (!prompt) setPrompt(lang === "fr" ? insp.hintFr : insp.hint);
     }
   };
 
@@ -147,11 +155,9 @@ export default function DashboardPage() {
         body.sceneId = inspiration.sceneId;
         if (prompt.trim()) body.extraInstructions = prompt.trim();
       } else {
-        // Pas d'inspiration sélectionnée → utilise le flow legacy avec prompt libre
         body.category = "lifestyle";
         body.subcategory = "custom";
         body.extraInstructions = prompt.trim();
-        // Fallback scene pour avoir un prompt de base
         body.sceneId = "mansion-pool";
         body.extraInstructions = prompt.trim();
       }
@@ -169,12 +175,12 @@ export default function DashboardPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Génération échouée");
+        throw new Error(data.error || t("dash_fail"));
       }
 
       setResultUrl(data.imageUrl || data.images?.[0]?.url || null);
-      await updateSession(); // rafraîchit les crédits dans la session
-      toast.success("Ta photo est prête 🔥");
+      await updateSession();
+      toast.success(t("dash_success_toast"));
     } catch (e: any) {
       setError(e.message);
       toast.error(e.message);
@@ -198,9 +204,9 @@ export default function DashboardPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl lg:text-3xl font-heading font-bold text-white">
-            Salut {firstName} 👋
+            {t("dash_greeting")} {firstName} 👋
           </h1>
-          <p className="text-zinc-500 mt-1 text-sm">Crée ta prochaine photo</p>
+          <p className="text-zinc-500 mt-1 text-sm">{t("dash_subtitle")}</p>
         </div>
         <Link
           href="/credits"
@@ -208,7 +214,7 @@ export default function DashboardPage() {
         >
           <Coins className="w-3.5 h-3.5 text-[#F9CA1F]" />
           <span className="text-sm font-bold text-[#F9CA1F]">
-            {credits >= 999999 ? "∞" : credits} crédit{credits > 1 ? "s" : ""}
+            {credits >= 999999 ? "∞" : credits} {credits > 1 ? t("dash_credits") : t("dash_credit")}
           </span>
         </Link>
       </div>
@@ -217,7 +223,7 @@ export default function DashboardPage() {
       {resultUrl && (
         <div className="rounded-2xl overflow-hidden border border-[#F9CA1F]/20 bg-[#141416]">
           <div className="relative aspect-video">
-            <Image src={resultUrl} alt="Résultat" fill className="object-cover" />
+            <Image src={resultUrl} alt="Result" fill className="object-cover" />
           </div>
           <div className="p-4 flex gap-3">
             <a
@@ -228,14 +234,14 @@ export default function DashboardPage() {
               className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#F9CA1F] text-black font-semibold text-sm hover:bg-[#F9CA1F]/90 transition-colors"
             >
               <Download className="w-4 h-4" />
-              Télécharger
+              {t("dash_download")}
             </a>
             <button
               onClick={handleReset}
               className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10 transition-colors text-sm"
             >
               <RotateCcw className="w-4 h-4" />
-              Nouvelle
+              {t("dash_new")}
             </button>
           </div>
         </div>
@@ -256,7 +262,7 @@ export default function DashboardPage() {
             /* Photo preview */
             <div className="relative rounded-2xl overflow-hidden border border-[#2A2A2E] bg-[#141416]">
               <div className="relative aspect-[4/3]">
-                <Image src={preview} alt="Ta photo" fill className="object-cover" />
+                <Image src={preview} alt="Your photo" fill className="object-cover" />
                 {uploading && (
                   <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                     <div className="flex flex-col items-center gap-2">
@@ -268,7 +274,7 @@ export default function DashboardPage() {
                 {uploadedUrl && (
                   <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 bg-black/70 rounded-full backdrop-blur-sm">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                    <span className="text-xs text-white">Photo prête</span>
+                    <span className="text-xs text-white">{t("dash_photo_ready")}</span>
                   </div>
                 )}
               </div>
@@ -299,14 +305,14 @@ export default function DashboardPage() {
               </div>
               <div className="text-center">
                 <p className="text-white font-medium text-sm">
-                  Dépose ta photo ici
+                  {t("dash_drop_title")}
                 </p>
                 <p className="text-zinc-500 text-xs mt-1">
-                  Appuie pour choisir ou prendre une photo
+                  {t("dash_drop_hint")}
                 </p>
               </div>
               <span className="text-xs text-zinc-600 mt-1">
-                Optionnel — sans photo, on génère une scène seule
+                {t("dash_drop_optional")}
               </span>
             </button>
           )}
@@ -316,7 +322,7 @@ export default function DashboardPage() {
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Ex : devant une Ferrari rouge sous la pluie à Monaco, éclairage cinématique doré…"
+              placeholder={t("dash_prompt_placeholder")}
               rows={3}
               className="w-full rounded-xl border border-[#2A2A2E] bg-[#141416] px-4 py-3 text-sm text-white placeholder:text-zinc-600 resize-none focus:outline-none focus:border-[#F9CA1F]/40 focus:ring-1 focus:ring-[#F9CA1F]/20 transition-colors"
             />
@@ -325,7 +331,7 @@ export default function DashboardPage() {
           {/* ── Inspirations ───────────────────────────────────── */}
           <div className="space-y-3">
             <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
-              Inspirations
+              {t("dash_inspirations")}
             </p>
             <div className="flex gap-2 flex-wrap">
               {INSPIRATIONS.map((insp) => {
@@ -343,7 +349,7 @@ export default function DashboardPage() {
                     )}
                   >
                     <span>{insp.icon}</span>
-                    {insp.label}
+                    {lang === "fr" ? (insp.labelFr ?? insp.label) : insp.label}
                   </button>
                 );
               })}
@@ -371,14 +377,14 @@ export default function DashboardPage() {
             {generating ? (
               <>
                 <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                Génération en cours…
+                {t("dash_generating")}
               </>
             ) : (
               <>
                 <Sparkles className="w-5 h-5" />
-                Générer
+                {t("dash_generate_btn")}
                 <span className="ml-1 text-sm font-normal opacity-70">
-                  · {uploadedUrl ? "2" : "1"} crédit{uploadedUrl ? "s" : ""}
+                  · {uploadedUrl ? "2" : "1"} {uploadedUrl ? t("dash_credits") : t("dash_credit")}
                 </span>
               </>
             )}
@@ -386,9 +392,9 @@ export default function DashboardPage() {
 
           {credits === 0 && (
             <p className="text-center text-xs text-zinc-500">
-              Plus de crédits.{" "}
+              {t("dash_no_credits")}{" "}
               <Link href="/credits" className="text-[#F9CA1F] hover:underline">
-                Recharger →
+                {t("dash_recharge")}
               </Link>
             </p>
           )}

@@ -5,6 +5,7 @@ import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { z } from "zod";
+import { useLanguage } from "@/lib/i18n/context";
 
 const registerSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -28,6 +29,7 @@ function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const referralCode = searchParams.get("ref") || "";
+  const { t } = useLanguage();
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -160,19 +162,19 @@ function RegisterForm() {
 
           {/* Texte */}
           <h1 className="font-heading text-3xl font-extrabold text-white mb-2">
-            Compte créé ! 🎉
+            {t("register_success_title")}
           </h1>
           <p className="text-zinc-400 text-base mb-1">
-            Bienvenue sur <span className="text-[#F9CA1F] font-semibold">letmeflex.ai</span>
+            {t("register_success_welcome")} <span className="text-[#F9CA1F] font-semibold">letmeflex.ai</span>
           </p>
           <p className="text-zinc-500 text-sm mb-8">
-            Tu reçois <span className="text-white font-medium">3 crédits offerts</span> pour commencer à flexer
+            {t("register_success_you_receive")} <span className="text-white font-medium">3</span> {t("register_success_credits")}
           </p>
 
           {/* Barre de progression + countdown */}
           <div className="bg-[#141416] border border-[#2A2A2E] rounded-2xl p-6">
             <p className="text-zinc-400 text-sm mb-4">
-              Connexion automatique dans{" "}
+              {t("register_success_countdown")}{" "}
               <span className="text-[#F9CA1F] font-bold text-lg">{countdown}</span>s...
             </p>
             <div className="w-full h-1.5 bg-[#2A2A2E] rounded-full overflow-hidden">
@@ -184,7 +186,7 @@ function RegisterForm() {
               />
             </div>
             <p className="text-zinc-600 text-xs mt-3">
-              Tu vas être redirigé vers ton studio
+              {t("register_success_redirect")}
             </p>
           </div>
 
@@ -215,7 +217,7 @@ function RegisterForm() {
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2.5"><span className="w-2.5 h-2.5 rounded-full bg-[#F9CA1F] animate-pulse" /><span className="font-heading text-3xl font-extrabold text-white">letmeflex<span className="text-[#F9CA1F]">.ai</span></span></div>
           <p className="text-zinc-500 mt-2 text-sm">
-            Create your account and start flexing
+            {t("register_subtitle")}
           </p>
         </div>
 
@@ -229,7 +231,7 @@ function RegisterForm() {
 
           {referralCode && (
             <div className="mb-6 p-3 rounded-lg bg-[#F9CA1F]/10 border border-[#F9CA1F]/20 text-[#F9CA1F] text-sm text-center">
-              You were referred! You&apos;ll get 2 bonus credits on signup.
+              {t("register_referred")}
             </div>
           )}
 
@@ -258,7 +260,7 @@ function RegisterForm() {
                 fill="#EA4335"
               />
             </svg>
-            Continue with Google
+            {t("register_google")}
           </button>
 
           {/* Divider */}
@@ -268,7 +270,7 @@ function RegisterForm() {
             </div>
             <div className="relative flex justify-center text-xs">
               <span className="bg-[#141416] px-3 text-zinc-500">
-                or register with email
+                {t("register_or")}
               </span>
             </div>
           </div>
@@ -283,14 +285,14 @@ function RegisterForm() {
                 htmlFor="name"
                 className="block text-sm font-medium text-zinc-400 mb-1.5"
               >
-                Name
+                {t("register_name")}
               </label>
               <input
                 id="name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Your name"
+                placeholder={t("register_name_placeholder")}
                 autoComplete="name"
                 className="w-full rounded-lg border border-[#2A2A2E] bg-[#0C0C0E] px-4 py-2.5 text-white placeholder:text-zinc-600 text-sm focus:outline-none focus:ring-2 focus:ring-[#F9CA1F]/40 focus:border-[#F9CA1F]/40 transition-colors"
               />
@@ -304,7 +306,7 @@ function RegisterForm() {
                 htmlFor="email"
                 className="block text-sm font-medium text-zinc-400 mb-1.5"
               >
-                Email
+                {t("register_email")}
               </label>
               <input
                 id="email"
@@ -325,14 +327,14 @@ function RegisterForm() {
                 htmlFor="password"
                 className="block text-sm font-medium text-zinc-400 mb-1.5"
               >
-                Password
+                {t("register_pw")}
               </label>
               <input
                 id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Min. 8 characters"
+                placeholder={t("register_pw_placeholder")}
                 autoComplete="new-password"
                 className="w-full rounded-lg border border-[#2A2A2E] bg-[#0C0C0E] px-4 py-2.5 text-white placeholder:text-zinc-600 text-sm focus:outline-none focus:ring-2 focus:ring-[#F9CA1F]/40 focus:border-[#F9CA1F]/40 transition-colors"
               />
@@ -346,18 +348,18 @@ function RegisterForm() {
               disabled={loading}
               className="w-full rounded-lg bg-[#F9CA1F] px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-[#F9CA1F]/90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? "Creating account..." : "Create Account"}
+              {loading ? t("register_creating") : t("register_cta")}
             </button>
           </form>
 
           {/* Footer */}
           <p className="mt-6 text-center text-sm text-zinc-500">
-            Already have an account?{" "}
+            {t("register_have_account")}{" "}
             <Link
               href="/login"
               className="text-[#F9CA1F] font-medium hover:underline"
             >
-              Sign in
+              {t("register_sign_in")}
             </Link>
           </p>
         </div>
