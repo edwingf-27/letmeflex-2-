@@ -42,17 +42,17 @@ export function Hero() {
         {/* Badge */}
         <motion.div
           custom={0} variants={fadeUp} initial="hidden" animate="visible"
-          className="mb-8 inline-flex items-center gap-2 rounded-full border border-[#F9CA1F]/20 bg-[#F9CA1F]/5 px-4 py-1.5"
+          className="mb-8 inline-flex items-center gap-2 rounded-full border border-[#F9CA1F]/20 bg-[#F9CA1F]/5 px-3 py-1.5 max-w-[90vw]"
         >
           <Sparkles className="h-3.5 w-3.5 text-[#F9CA1F]" />
-          <span className="text-xs font-medium tracking-wide text-[#F9CA1F]">
+          <span className="text-[10px] sm:text-xs font-medium tracking-wide text-[#F9CA1F] whitespace-nowrap">
             Génération d'images IA · Lifestyle luxe
           </span>
         </motion.div>
 
         {/* Main title */}
         <motion.div custom={1} variants={fadeUp} initial="hidden" animate="visible">
-          <h1 className="font-heading font-extrabold leading-none tracking-tight text-white text-5xl sm:text-7xl md:text-8xl lg:text-[9rem]">
+          <h1 className="font-heading font-extrabold leading-none tracking-tight text-white text-[10vw] sm:text-7xl md:text-8xl lg:text-[9rem]">
             letmeflex
             <span className="text-[#F9CA1F]">.ai</span>
           </h1>
