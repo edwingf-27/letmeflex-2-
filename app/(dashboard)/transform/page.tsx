@@ -61,11 +61,11 @@ export default function TransformPage() {
   const { data: session, update } = useSession();
   const { t } = useLanguage();
 
-  type ModeId = "replace_object" | "add_person";
+  type ModeId = "replace_person" | "add_person";
 
   const MODES = [
     {
-      id: "replace_object" as ModeId,
+      id: "replace_person" as ModeId,
       emoji: "🔄",
       label: t("transform_mode_replace_label"),
       description: t("transform_mode_replace_desc"),
@@ -90,7 +90,7 @@ export default function TransformPage() {
     },
   ];
 
-  const [selectedMode, setSelectedMode] = useState<ModeId>("replace_object");
+  const [selectedMode, setSelectedMode] = useState<ModeId>("replace_person");
   const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [sourcePreview, setSourcePreview] = useState<string | null>(null);
   const [refFile, setRefFile] = useState<File | null>(null);
@@ -236,11 +236,11 @@ export default function TransformPage() {
                 className="space-y-2"
               >
                 <div className="flex items-center gap-2">
-                  <UserPlus className="w-4 h-4 text-[#6C63FF]" />
+                  <UserPlus className="w-4 h-4 text-[#F9CA1F]" />
                   <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest">
                     {t("transform_ref_label_section")}
-                    <span className="ml-2 text-xs text-zinc-600 normal-case font-normal tracking-normal">
-                      {t("transform_optional")}
+                    <span className="ml-2 text-xs text-[#F9CA1F]/60 normal-case font-normal tracking-normal">
+                      ✦ required
                     </span>
                   </h2>
                 </div>
@@ -291,7 +291,7 @@ export default function TransformPage() {
           {/* CTA */}
           <button
             onClick={handleTransform}
-            disabled={!sourceFile || loading}
+            disabled={!sourceFile || !refFile || loading}
             className="w-full py-3.5 rounded-2xl bg-[#F9CA1F] text-black font-heading font-bold text-base disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#F9CA1F]/90 active:scale-95 transition-all flex items-center justify-center gap-2"
           >
             {loading ? (
@@ -310,6 +310,11 @@ export default function TransformPage() {
             )}
           </button>
 
+          {sourceFile && !refFile && !loading && (
+            <p className="text-amber-400 text-xs text-center">
+              ⚠ Add a reference photo to activate the transform
+            </p>
+          )}
           {error && <p className="text-red-400 text-sm text-center">{error}</p>}
         </div>
 

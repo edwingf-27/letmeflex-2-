@@ -1,32 +1,31 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db, generateId } from "@/lib/db";
+import { fal } from "@fal-ai/client";
 import { imageToImageWithFal } from "@/lib/image-gen/providers/fal";
 
 export const maxDuration = 300;
 
-const TRANSFORM_MODES = {
-  replace_object: {
-    strength: 0.65,
-    buildPrompt: (extra: string) =>
-      `RAW photo, DSLR photograph, Canon EOS R5, photorealistic, hyperrealistic. ` +
-      `${extra || "replace the specified object seamlessly"}. ` +
-      "Keep everything else in the photo EXACTLY the same — same background, same people, same lighting. " +
-      "Only modify the specified object or area. " +
-      "Seamless integration, perfect lighting match, ultra-detailed, 8K UHD. Real photograph. NOT AI art.",
-  },
-  add_person: {
-    strength: 0.78,
-    buildPrompt: (extra: string) =>
-      `RAW photo, DSLR photograph, Canon EOS R5, photorealistic, hyperrealistic. ` +
-      `${extra || "add a person naturally next to the main subject"}. ` +
-      "Natural skin texture, realistic body proportions, matching lighting and shadows from the existing scene, " +
-      "seamless integration with the background, ultra-detailed, 8K UHD. " +
-      "Keep the original background and main subject intact. Real photograph. NOT a painting.",
-  },
-} as const;
+const falKey = process.env.FAL_KEY?.trim();
+if (falKey) fal.config({ credentials: falKey });
 
-type TransformMode = keyof typeof TRANSFORM_MODES;
+type TransformMode = "replace_person" | "add_person";
+
+// ─── Face swap helper ──────────────────────────────────────────────────────────
+// Swaps the face in targetImageUrl with the face from refImageUrl
+async function faceSwap(targetImageUrl: string, refImageUrl: string): Promise<string> {
+  const result = await fal.subscribe("fal-ai/face-swap", {
+    input: {
+      image0: { image_url: targetImageUrl },
+      image1: { image_url: refImageUrl },
+    },
+  }) as any;
+
+  const data = result.data || result;
+  const url = data.image?.url || data.images?.[0]?.url;
+  if (!url) throw new Error("face-swap returned no image");
+  return url;
+}
 
 export async function POST(req: Request) {
   try {
@@ -43,7 +42,7 @@ export async function POST(req: Request) {
       refImageUrl?: string;
     };
 
-    if (!imageUrl || !mode || !TRANSFORM_MODES[mode]) {
+    if (!imageUrl || !mode) {
       return NextResponse.json({ error: "imageUrl and mode are required" }, { status: 400 });
     }
 
@@ -63,22 +62,9 @@ export async function POST(req: Request) {
       );
     }
 
-    const config = TRANSFORM_MODES[mode];
-
-    // Build a richer prompt when a reference image is provided
-    let promptInput = extraInstructions || "";
-    if (refImageUrl && !extraInstructions) {
-      promptInput = mode === "replace_object"
-        ? "replace the specified object with the one shown in the reference image"
-        : "add the person from the reference image naturally next to the main subject";
-    }
-
-    const prompt = config.buildPrompt(promptInput);
-
     // Deduct credit
     const newCredits = user.credits - CREDIT_COST;
     await db.from("User").update({ credits: newCredits }).eq("id", user.id);
-
     const transformId = generateId();
     await db.from("CreditLog").insert({
       id: generateId(),
@@ -90,17 +76,54 @@ export async function POST(req: Request) {
 
     try {
       const start = Date.now();
+      let outputUrl = "";
 
-      // Always use image-to-image on the SOURCE photo so the original scene is preserved
-      // refImageUrl is used as additional context in the prompt (direct conditioning
-      // requires IP-Adapter which we keep as a future upgrade)
-      const result = await imageToImageWithFal(imageUrl, prompt, config.strength, 1);
-      const outputUrl = result.images[0]?.imageUrl || "";
+      if (mode === "replace_person") {
+        // ── Replace an existing person next to you ────────────────────────────
+        // If a reference photo is provided → face swap directly on source photo
+        // If no reference → use image-to-image with the text prompt
+        if (refImageUrl) {
+          outputUrl = await faceSwap(imageUrl, refImageUrl);
+        } else {
+          const prompt =
+            `RAW photo, DSLR photograph, Canon EOS R5, photorealistic. ` +
+            `${extraInstructions || "replace the person next to the main subject with someone else"}. ` +
+            "Natural skin texture, matching lighting, seamless integration, 8K UHD. Real photograph.";
+          const r = await imageToImageWithFal(imageUrl, prompt, 0.72, 1);
+          outputUrl = r.images[0]?.imageUrl || "";
+        }
 
-      if (!outputUrl) throw new Error("FAL returned no image for transform");
+      } else if (mode === "add_person") {
+        // ── Add a new person next to you ─────────────────────────────────────
+        // Step 1: image-to-image to physically add a person into the scene
+        const addPrompt =
+          `RAW photo, DSLR photograph, Canon EOS R5, photorealistic, hyperrealistic. ` +
+          `${extraInstructions || "add a person naturally standing next to the main subject, same lighting, realistic body"}. ` +
+          "Keep the original background and main subject exactly the same. " +
+          "Natural skin texture, realistic proportions, seamless integration, 8K UHD. Real photograph.";
+
+        const step1 = await imageToImageWithFal(imageUrl, addPrompt, 0.78, 1);
+        const step1Url = step1.images[0]?.imageUrl || "";
+        if (!step1Url) throw new Error("Image-to-image step failed");
+
+        // Step 2: if a reference face is provided, swap the new person's face
+        if (refImageUrl) {
+          try {
+            outputUrl = await faceSwap(step1Url, refImageUrl);
+          } catch (faceSwapErr: any) {
+            console.warn("[TRANSFORM] face-swap step failed, returning step1:", faceSwapErr.message);
+            // Fall back to step1 result without face swap
+            outputUrl = step1Url;
+          }
+        } else {
+          outputUrl = step1Url;
+        }
+      }
+
+      if (!outputUrl) throw new Error("Transform produced no image");
 
       const durationMs = Date.now() - start;
-      console.log(`[TRANSFORM] mode=${mode} strength=${config.strength} duration=${durationMs}ms`);
+      console.log(`[TRANSFORM] mode=${mode} duration=${durationMs}ms hasRef=${!!refImageUrl}`);
 
       return NextResponse.json({
         id: transformId,
@@ -111,12 +134,13 @@ export async function POST(req: Request) {
         creditsRemaining: newCredits,
         durationMs,
       });
+
     } catch (err: any) {
-      // Refund credit on error
+      // Refund on error
       await db.from("User").update({ credits: user.credits }).eq("id", user.id);
       console.error("[TRANSFORM_ERROR]", err?.message || err);
       return NextResponse.json(
-        { error: "Transformation failed. Credits refunded." },
+        { error: `Transformation failed: ${err?.message || "unknown error"}. Credits refunded.` },
         { status: 500 }
       );
     }

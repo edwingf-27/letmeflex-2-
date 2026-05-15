@@ -91,17 +91,17 @@ const translations = {
     transform_ai_notice: "✓ AI will reproduce this element in your photo",
     transform_no_credits: "You have no more credits.",
 
-    transform_mode_replace_label: "Replace an object",
-    transform_mode_replace_desc: "Add or replace an object with a reference photo",
-    transform_mode_replace_placeholder: "E.g. replace the steering wheel with the one from the reference photo...",
-    transform_mode_replace_reflabel: "Photo of the object to add",
-    transform_mode_replace_refhint: "Exact photo of the object to integrate",
+    transform_mode_replace_label: "Replace a person",
+    transform_mode_replace_desc: "Swap someone already in your photo for another person using their reference photo",
+    transform_mode_replace_placeholder: "E.g. replace the person on my right...",
+    transform_mode_replace_reflabel: "Reference photo (required)",
+    transform_mode_replace_refhint: "Photo of the person to put in their place",
 
     transform_mode_person_label: "Add a person",
-    transform_mode_person_desc: "Add someone with their real face via a reference photo",
-    transform_mode_person_placeholder: "E.g. standing on my right, arms crossed...",
-    transform_mode_person_reflabel: "Photo of the person",
-    transform_mode_person_refhint: "AI will reproduce their face and style",
+    transform_mode_person_desc: "Add a new person next to you using their reference photo",
+    transform_mode_person_placeholder: "E.g. standing on my right, arms crossed, smiling...",
+    transform_mode_person_reflabel: "Reference photo (required)",
+    transform_mode_person_refhint: "Photo of the person to add next to you",
 
     // ── Gallery ──────────────────────────────────────────────────────
     gallery_title: "My",
@@ -283,17 +283,17 @@ const translations = {
     transform_ai_notice: "✓ L'IA va reproduire cet élément dans ta photo",
     transform_no_credits: "Tu n'as plus de crédits.",
 
-    transform_mode_replace_label: "Remplacer un objet",
-    transform_mode_replace_desc: "Ajoute ou remplace un objet avec photo de référence",
-    transform_mode_replace_placeholder: "Ex : remplace le volant par celui de la photo de référence...",
-    transform_mode_replace_reflabel: "Photo de l'objet à ajouter",
-    transform_mode_replace_refhint: "Photo de l'objet exact à intégrer",
+    transform_mode_replace_label: "Remplacer une personne",
+    transform_mode_replace_desc: "Remplace quelqu'un déjà dans ta photo par une autre personne via sa photo",
+    transform_mode_replace_placeholder: "Ex : remplace la personne à ma droite...",
+    transform_mode_replace_reflabel: "Photo de référence (obligatoire)",
+    transform_mode_replace_refhint: "Photo de la personne à mettre à la place",
 
     transform_mode_person_label: "Ajouter une personne",
-    transform_mode_person_desc: "Ajoute quelqu'un avec sa vraie tête via photo de référence",
-    transform_mode_person_placeholder: "Ex : debout à ma droite, bras croisés...",
-    transform_mode_person_reflabel: "Photo de la personne",
-    transform_mode_person_refhint: "L'IA reproduit son visage et son style",
+    transform_mode_person_desc: "Ajoute une nouvelle personne à côté de toi via sa photo de référence",
+    transform_mode_person_placeholder: "Ex : debout à ma droite, bras croisés, souriant...",
+    transform_mode_person_reflabel: "Photo de référence (obligatoire)",
+    transform_mode_person_refhint: "Photo de la personne à ajouter à côté de toi",
 
     // ── Gallery ──────────────────────────────────────────────────────
     gallery_title: "Mon",
